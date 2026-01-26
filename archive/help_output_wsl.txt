@@ -1,0 +1,23 @@
+Usage: openspec [options] [command]
+
+AI-native system for spec-driven development
+
+Options:
+  -V, --version                    output the version number
+  --no-color                       Disable color output
+  -h, --help                       display help for command
+
+Commands:
+  init [options] [path]            Initialize OpenSpec in your project
+  update [path]                    Update OpenSpec instruction files
+  list [options]                   List items (changes by default). Use --specs
+                                   to list specs.
+  view                             Display an interactive dashboard of specs and
+                                   changes
+  change                           Manage OpenSpec change proposals
+  archive [options] [change-name]  Archive a completed change and update main
+                                   specs
+  spec                             Manage and view OpenSpec specifications
+  validate [options] [item-name]   Validate changes and specs
+  show [options] [item-name]       Show a change or spec
+  help [command]                   display help for command

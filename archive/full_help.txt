@@ -1,0 +1,49 @@
+Usage: openspec [options] [command]
+
+AI-native system for spec-driven development
+
+Options:
+  -V, --version                    output the version number
+  --no-color                       Disable color output
+  -h, --help                       display help for command
+
+Commands:
+  init [options] [path]            Initialize OpenSpec in your project
+  update [path]                    Update OpenSpec instruction files
+  list [options]                   List items (changes by default). Use --specs
+                                   to list specs.
+  view                             Display an interactive dashboard of specs and
+                                   changes
+  change                           Manage OpenSpec change proposals
+  archive [options] [change-name]  Archive a completed change and update main
+                                   specs
+  spec                             Manage and view OpenSpec specifications
+  validate [options] [item-name]   Validate changes and specs
+  show [options] [item-name]       Show a change or spec
+  help [command]                   display help for command
+Usage: openspec change [options] [command]
+
+Manage OpenSpec change proposals
+
+Options:
+  -h, --help                        display help for command
+
+Commands:
+  show [options] [change-name]      Show a change proposal in JSON or markdown
+                                    format
+  list [options]                    List all active changes (DEPRECATED: use
+                                    "openspec list" instead)
+  validate [options] [change-name]  Validate a change proposal
+  help [command]                    display help for command
+Usage: openspec spec [options] [command]
+
+Manage and view OpenSpec specifications
+
+Options:
+  -h, --help                    display help for command
+
+Commands:
+  show [options] [spec-id]      Display a specific specification
+  list [options]                List all available specifications
+  validate [options] [spec-id]  Validate a specification structure
+  help [command]                display help for command

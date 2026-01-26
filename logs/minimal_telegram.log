@@ -1,0 +1,56 @@
+2026-01-23 23:34:31,881 - freqtrade - INFO - freqtrade 2025.12
+2026-01-23 23:34:33,893 - freqtrade.worker - INFO - Starting worker 2025.12
+2026-01-23 23:34:33,894 - freqtrade.configuration.load_config - INFO - Using config: minimal_telegram_config.json ...
+2026-01-23 23:34:33,897 - freqtrade.loggers - INFO - Enabling colorized output.
+2026-01-23 23:34:33,898 - freqtrade.loggers - INFO - Logfile configured
+2026-01-23 23:34:33,898 - freqtrade.loggers - INFO - Verbosity set to 0
+2026-01-23 23:34:33,899 - freqtrade.configuration.configuration - INFO - Parameter --dry-run detected, overriding dry_run to: True ...
+2026-01-23 23:34:33,900 - freqtrade.configuration.configuration - INFO - Runmode set to dry_run.
+2026-01-23 23:34:33,900 - freqtrade.configuration.configuration - INFO - Dry run is enabled
+2026-01-23 23:34:33,900 - freqtrade.configuration.configuration - INFO - Using DB: "sqlite:///tradesv3.dryrun.sqlite"
+2026-01-23 23:34:33,901 - freqtrade.configuration.configuration - INFO - Using max_open_trades: 1 ...
+2026-01-23 23:34:33,914 - freqtrade.configuration.configuration - INFO - Using user-data directory: /mnt/c/Users/OFFRSTAR0/Engram/user_data ...
+2026-01-23 23:34:33,916 - freqtrade.configuration.configuration - INFO - Using data directory: /mnt/c/Users/OFFRSTAR0/Engram/user_data/data/binance ...
+2026-01-23 23:34:33,917 - freqtrade.exchange.check_exchange - INFO - Checking exchange...
+2026-01-23 23:34:33,924 - freqtrade.exchange.check_exchange - INFO - Exchange "binance" is officially supported by the Freqtrade development team.
+2026-01-23 23:34:33,924 - freqtrade.configuration.configuration - INFO - Using pairlist from configuration.
+2026-01-23 23:34:33,925 - freqtrade.exchange.exchange - INFO - Instance is running with dry_run enabled
+2026-01-23 23:34:33,925 - freqtrade.exchange.exchange - INFO - Using CCXT 4.5.34
+2026-01-23 23:34:33,942 - freqtrade.exchange.exchange - INFO - Using Exchange "Binance"
+2026-01-23 23:34:35,516 - freqtrade - ERROR - Fatal exception!
+Traceback (most recent call last):
+  File "/home/offstar0/.local/lib/python3.12/site-packages/freqtrade/main.py", line 53, in main
+    return_code = args["func"](args)
+                  ^^^^^^^^^^^^^^^^^^
+  File "/home/offstar0/.local/lib/python3.12/site-packages/freqtrade/commands/trade_commands.py", line 24, in start_trading
+    worker = Worker(args)
+             ^^^^^^^^^^^^
+  File "/home/offstar0/.local/lib/python3.12/site-packages/freqtrade/worker.py", line 39, in __init__
+    self._init(False)
+  File "/home/offstar0/.local/lib/python3.12/site-packages/freqtrade/worker.py", line 55, in _init
+    self.freqtrade = FreqtradeBot(self._config)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/offstar0/.local/lib/python3.12/site-packages/freqtrade/freqtradebot.py", line 96, in __init__
+    self.exchange = ExchangeResolver.load_exchange(
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/offstar0/.local/lib/python3.12/site-packages/freqtrade/resolvers/exchange_resolver.py", line 44, in load_exchange
+    exchange = ExchangeResolver._load_exchange(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/offstar0/.local/lib/python3.12/site-packages/freqtrade/resolvers/exchange_resolver.py", line 77, in _load_exchange
+    exchange = ex_class(**kwargs)
+               ^^^^^^^^^^^^^^^^^^
+  File "/home/offstar0/.local/lib/python3.12/site-packages/freqtrade/exchange/binance.py", line 80, in __init__
+    super().__init__(*args, **kwargs)
+  File "/home/offstar0/.local/lib/python3.12/site-packages/freqtrade/exchange/exchange.py", line 299, in __init__
+    self.validate_config(config)
+  File "/home/offstar0/.local/lib/python3.12/site-packages/freqtrade/exchange/exchange.py", line 353, in validate_config
+    self.validate_pricing(config["exit_pricing"])
+                          ~~~~~~^^^^^^^^^^^^^^^^
+KeyError: 'exit_pricing'
+Exception ignored in: <module 'threading' from '/usr/lib/python3.12/threading.py'>
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/threading.py", line 1622, in _shutdown
+    lock.acquire()
+  File "/home/offstar0/.local/lib/python3.12/site-packages/freqtrade/commands/trade_commands.py", line 18, in term_handler
+    raise KeyboardInterrupt()
+KeyboardInterrupt: 

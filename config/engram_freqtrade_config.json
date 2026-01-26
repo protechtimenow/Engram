@@ -1,0 +1,133 @@
+{
+  "freqtrade": {
+    "enabled": true,
+    "strategy": "EngramStrategy",
+    "strategy_path": ".",
+    "max_open_trades": 5,
+    "stake_currency": "USDT",
+    "stake_amount": "unlimited",
+    "tradable_balance_ratio": 0.5,
+    "fiat_display_currency": "USD",
+    "timeframe": "5m",
+    "dry_run": true,
+    "dry_run_wallet": 1000,
+    "cancel_open_orders_on_exit": false,
+    "trading_mode": "spot",
+    "margin_mode": "",
+    "unfilledtimeout": {
+      "entry": 10,
+      "exit": 10,
+      "exit_timeout_count": 0,
+      "unit": "minutes"
+    },
+    "entry_pricing": {
+      "use_side_signal": false,
+      "price_side": "same",
+      "order_book_max": 1,
+      "order_book_min": 1,
+      "price_last_balance": 0.0,
+      "check_depth_of_market": {
+        "enabled": false,
+        "bids_to_ask_delta": 1
+      }
+    },
+    "exit_pricing":{
+        "use_side_signal": false,
+        "price_side": "other",
+        "order_book_max": 1,
+        "order_book_min": 1,
+        "price_last_balance": 0.0
+    },
+    "exchange": {
+      "name": "binance",
+      "key": "",
+      "secret": "",
+      "ccxt_config": {},
+      "ccxt_async_config": {},
+      "pair_whitelist": [
+        "BTC/USDT",
+        "ETH/USDT",
+        "BNB/USDT",
+        "SOL/USDT",
+        "AVAX/USDT"
+      ],
+      "pair_blacklist": []
+    },
+    "pairlists": [
+      {
+        "method": "StaticPairList"
+      }
+    ],
+    " protections": []
+  },
+  "engram": {
+    "enabled": true,
+    "model_path": "./engram_demo_v1.py",
+    "max_ngram_size": 3,
+    "n_embed_per_ngram": 512,
+    "n_head_per_ngram": 8,
+    "layer_ids": [1, 15],
+    "tokenizer_name_or_path": "deepseek-ai/DeepSeek-V3",
+    "seed": 42,
+    "kernel_size": 4,
+    "trading": {
+      "confidence_threshold": 0.7,
+      "max_signals_per_pair": 3,
+      "analysis_interval": 15,
+      "risk_management": {
+        "max_position_size": 0.1,
+        "stop_loss_multiplier": 1.5,
+        "take_profit_multiplier": 2.0
+      }
+    }
+  },
+  "telegram": {
+    "enabled": true,
+    "token": "YOUR_TELEGRAM_BOT_TOKEN",
+    "chat_id": "YOUR_CHAT_ID",
+    "notification_settings": {
+      "status": "on",
+      "warning": "on",
+      "startup": "on",
+      "entry": "on",
+      "entry_fill": "on",
+      "exit": "on",
+      "exit_fill": "on",
+      "protection_trigger": "on",
+      "protection_trigger_global": "on",
+      "show_candle": "on",
+      "strategy_msg": "on"
+    },
+    "keyboard": [
+      ["/status", "/profit", "/balance"],
+      ["/daily", "/trades", "/performance"],
+      ["/analysis", "/predict", "/engram_status"],
+      ["/chat", "/portfolio_insights", "/help"]
+    ],
+    "engram_features": {
+      "enabled": true,
+      "natural_language_processing": true,
+      "ai_predictions": true,
+      "smart_alerts": true,
+      "portfolio_insights": true
+    }
+  },
+  "api_server": {
+    "enabled": true,
+    "listen_ip_address": "127.0.0.1",
+    "listen_port": 8080,
+    "verbosity": "error",
+    "enable_openapi": false,
+    "jwt_secret_key": "supersecret",
+    "username": "freqtrade",
+    "password": "freqtrade",
+    "CORS_origins": [],
+    "ws_token": "wstoken"
+  },
+  "bot_name": "EngramFreqTrader",
+  "initial_state": "running",
+  "force_entry_enable": false,
+  "internals": {
+    "process_throttle_secs": 5
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "profile": "steve_jobs_mode",
+  "dashboard_port": 8585,
+  "reality_distortion": true,
+  "insight_density": 10.0,
+  "reddit_communities": [
+    "r/Quant",
+    "r/finance",
+    "r/SecurityAnalysis",
+    "r/wallstreetbets",
+    "r/personalfinance",
+    "r/Economics",
+    "r/stocks",
+    "r/portfolios",
+    "r/investing",
+    "r/ValueInvesting",
+    "r/FluentInFinance"
+  ],
+  "sentiment_threshold": 0.3,
+  "trend_detection": true,
+  "auto_alerts": true,
+  "spirit_guides": [
+    {
+      "name": "Market Oracle",
+      "channel": "telegram",
+      "personality": "wise"
+    },
+    {
+      "name": "Trading Sage",
+      "channel": "discord",
+      "personality": "insightful"
+    },
+    {
+      "name": "Risk Guardian",
+      "channel": "slack",
+      "personality": "cautious"
+    },
+    {
+      "name": "Trend Seer",
+      "channel": "web",
+      "personality": "visionary"
+    }
+  ],
+  "active_channels": [
+    "telegram",
+    "discord",
+    "slack",
+    "web"
+  ],
+  "agent_personality": "wise",
+  "processing_interval": 5,
+  "max_insights_per_minute": 100,
+  "background_processing": true,
+  "enable_api": true,
+  "api_port": 8000,
+  "cors_enabled": true
+}

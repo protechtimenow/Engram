@@ -1,0 +1,28 @@
+{
+  "max_open_trades": 3,
+  "stake_currency": "USDT",
+  "stake_amount": 100,
+  "dry_run": true,
+  "dry_run_wallet": 1000,
+  "timeframe": "5m",
+  "strategy": "SimpleEngramStrategy",
+  "strategy_path": ".",
+  "exchange": {
+    "name": "binance",
+    "pair_whitelist": [
+      "BTC/USDT",
+      "ETH/USDT",
+      "BNB/USDT"
+    ]
+  },
+  "telegram": {
+    "enabled": true,
+    "token": "8517504737:AAELKyE2jC48Ql1d1opfEy8ZMfU5UifB6kA",
+    "chat_id": "1007321485"
+  },
+  "api_server": {
+    "enabled": true,
+    "listen_ip_address": "127.0.0.1",
+    "listen_port": 8080
+  }
+}

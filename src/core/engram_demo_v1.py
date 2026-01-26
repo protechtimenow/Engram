@@ -158,6 +158,7 @@ class ShortConv(nn.Module):
         Input:  (B,L,HC_MULT,D)
         Output: (B,L,HC_MULT,D)
         """
+        print(f"DEBUG ShortConv input shape: {x.shape}")
         B, T, G, C = x.shape
         
         assert G == self.hc_mult, f"Input groups {G} != hc_mult {self.hc_mult}"
@@ -360,6 +361,7 @@ class Engram(nn.Module):
         hidden_states: [B, L, HC_MULT, D]
         input_ids: [B, L]
         """
+        print(f"DEBUG Engram input shapes: hidden_states={hidden_states.shape}, input_ids={input_ids.shape}")
         hash_input_ids = torch.from_numpy(self.hash_mapping.hash(input_ids)[self.layer_id])
         embeddings = self.multi_head_embedding(hash_input_ids).flatten(start_dim=-2)
         gates = []
@@ -393,12 +395,42 @@ class TransformerBlock(nn.Module):
         hidden_states = self.moe(hidden_states) + hidden_states
         return hidden_states
 
+class EngramModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.tokenizer = AutoTokenizer.from_pretrained(engram_cfg.tokenizer_name_or_path, trust_remote_code=True)
+        self.embedding = nn.Embedding(backbone_config.vocab_size, backbone_config.hidden_size)
+        self.layers = nn.ModuleList([TransformerBlock(layer_id=layer_id) for layer_id in range(backbone_config.num_layers)])
+        self.head = nn.Linear(backbone_config.hidden_size, backbone_config.vocab_size)
+
+    def forward(self, input_ids):
+        # Initial embedding
+        hidden_states = self.embedding(input_ids)
+        # Mock hyper-connection expansion (B, L, HC_MULT, D)
+        hidden_states = hidden_states.unsqueeze(2).expand(-1, -1, backbone_config.hc_mult, -1)
+        
+        for layer in self.layers:
+            hidden_states = layer(input_ids=input_ids, hidden_states=hidden_states)
+            
+        # Mock hyper-connection collapse for the head
+        hidden_states = hidden_states[:, :, 0, :]
+        logits = self.head(hidden_states)
+        return logits
+
+    @torch.no_grad()
+    def generate(self, prompt: str, max_new_tokens: int = 50):
+        input_ids = self.tokenizer(prompt, return_tensors='pt').input_ids
+        for _ in range(max_new_tokens):
+            logits = self.forward(input_ids)
+            next_token_logits = logits[:, -1, :]
+            next_token = torch.argmax(next_token_logits, dim=-1, keepdim=True)
+            input_ids = torch.cat([input_ids, next_token], dim=-1)
+            if next_token.item() == self.tokenizer.eos_token_id:
+                break
+        return self.tokenizer.decode(input_ids[0], skip_special_tokens=True)
+
 if __name__ == '__main__':
-    LLM = [
-        nn.Embedding(backbone_config.vocab_size,backbone_config.hidden_size),
-        *[TransformerBlock(layer_id=layer_id) for layer_id in range(backbone_config.num_layers)],
-        nn.Linear(backbone_config.hidden_size, backbone_config.vocab_size)
-    ]
+    model = EngramModel()
 
     text = "Only Alexander the Great could tame the horse Bucephalus."
     tokenizer = AutoTokenizer.from_pretrained(engram_cfg.tokenizer_name_or_path,trust_remote_code=True)
@@ -406,18 +438,9 @@ if __name__ == '__main__':
 
     B,L = input_ids.shape
 
-    for idx, layer in enumerate(LLM):
-        if idx == 0:
-            hidden_states = LLM[0](input_ids)
-            ## mock hyper-connection
-            hidden_states = hidden_states.unsqueeze(2).expand(-1, -1, backbone_config.hc_mult, -1)      
-        elif idx == len(LLM)-1:
-            ## mock hyper-connection
-            hidden_states = hidden_states[:,:,0,:] 
-            output = layer(hidden_states)
-        else:
-            hidden_states = layer(input_ids=input_ids,hidden_states=hidden_states)
+    # Forward pass through the model
+    logits = model(input_ids)
 
     print("✅ Forward Complete!")
-    print(f"{input_ids.shape=}\n{output.shape=}")
+    print(f"{input_ids.shape=}\n{logits.shape=}")
             

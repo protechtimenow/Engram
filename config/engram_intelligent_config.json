@@ -1,0 +1,134 @@
+{
+    "system": {
+        "name": "Intelligent Engram-FreqTrade",
+        "version": "2.0",
+        "mode": "intelligent"
+    },
+    "ai": {
+        "enabled": true,
+        "activation_mode": "smart",
+        "triggers": {
+            "volatility_threshold": 0.02,
+            "volume_spike_threshold": 3.0,
+            "trend_change_threshold": 0.05,
+            "price_momentum_threshold": 0.03
+        },
+        "resource_limits": {
+            "max_requests_per_minute": 10,
+            "cooldown_period": 60,
+            "max_analysis_time": 30
+        },
+        "model": {
+            "name": "Engram Neural Core",
+            "confidence_threshold": 0.7,
+            "max_context_length": 2048
+        }
+    },
+    "freqtrade": {
+        "max_open_trades": 3,
+        "stake_currency": "USDT",
+        "stake_amount": 100,
+        "tradable_balance_ratio": 0.3,
+        "timeframe": "5m",
+        "dry_run": true,
+        "dry_run_wallet": 1000,
+        "strategy": "IntelligentEngramStrategy",
+        "strategy_path": ".",
+        "exchange": {
+            "name": "binance",
+            "pair_whitelist": ["BTC/USDT", "ETH/USDT", "BNB/USDT"]
+        }
+    },
+    "telegram": {
+        "enabled": true,
+        "token": "8517504737:AAELKyE2jC48Ql1d1opfEy8ZMfU5UifB6kA",
+        "chat_id": "1007321485",
+        "intelligent_mode": true,
+        "nlu_enabled": true,
+        "features": {
+            "natural_language_queries": true,
+            "smart_responses": true,
+            "conditional_ai": true,
+            "integration_commands": true
+        }
+    },
+    "integrations": {
+        "enabled": true,
+        "auto_discover": true,
+        "available": [
+            {
+                "name": "discord",
+                "enabled": false,
+                "config": {}
+            },
+            {
+                "name": "slack",
+                "enabled": false,
+                "config": {}
+            },
+            {
+                "name": "webhook",
+                "enabled": true,
+                "config": {
+                    "port": 8081,
+                    "endpoints": ["/trade", "/alert", "analyze"]
+                }
+            },
+            {
+                "name": "database",
+                "enabled": true,
+                "config": {
+                    "type": "sqlite",
+                    "path": "engram_trades.db"
+                }
+            },
+            {
+                "name": "api_server",
+                "enabled": true,
+                "config": {
+                    "port": 8080,
+                    "auth": true,
+                    "rate_limit": 100
+                }
+            }
+        ]
+    },
+    "intelligence": {
+        "market_analysis": {
+            "indicators": ["rsi", "macd", "bb", "volume", "momentum"],
+            "timeframes": ["5m", "15m", "1h"],
+            "lookback_periods": [20, 50, 200]
+        },
+        "response_optimization": {
+            "cache_responses": true,
+            "smart_caching": true,
+            "avoid_redundant_calls": true,
+            "context_aware": true
+        },
+        "learning": {
+            "user_preference_learning": true,
+            "market_pattern_learning": true,
+            "response_improvement": true
+        }
+    },
+    "api_server": {
+        "enabled": true,
+        "listen_ip_address": "127.0.0.1",
+        "listen_port": 8080,
+        "verbosity": "error",
+        "enable_openapi": true,
+        "intelligent_endpoints": [
+            "/ai/analyze",
+            "/ai/predict", 
+            "/market/intelligence",
+            "/integrations/manage"
+        ]
+    },
+    "logging": {
+        "level": "INFO",
+        "file": "engram_intelligent.log",
+        "max_size": "100MB",
+        "backup_count": 5,
+        "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    }
+}

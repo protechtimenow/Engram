@@ -1,0 +1,14 @@
+Usage: openspec change [options] [command]
+
+Manage OpenSpec change proposals
+
+Options:
+  -h, --help                        display help for command
+
+Commands:
+  show [options] [change-name]      Show a change proposal in JSON or markdown
+                                    format
+  list [options]                    List all active changes (DEPRECATED: use
+                                    "openspec list" instead)
+  validate [options] [change-name]  Validate a change proposal
+  help [command]                    display help for command

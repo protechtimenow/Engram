@@ -1,0 +1,67 @@
+{
+    "max_open_trades": 1,
+    "stake_currency": "USDT", 
+    "stake_amount": 100,
+    "dry_run": true,
+    "dry_run_wallet": 1000,
+    "timeframe": "5m",
+    "strategy": "SimpleEngramStrategy",
+    "strategy_path": ".",
+    "initial_state": "running",
+    "unfilledtimeout": {
+        "entry": 10,
+        "exit": 10,
+        "exit_timeout_count": 0,
+        "unit": "minutes"
+    },
+    "entry_pricing": {
+        "use_side_signal": false,
+        "price_side": "same",
+        "order_book_max": 1,
+        "order_book_min": 1,
+        "price_last_balance": 0.0
+    },
+    "exit_pricing": {
+        "use_side_signal": false,
+        "price_side": "other",
+        "order_book_max": 1,
+        "order_book_min": 1,
+        "price_last_balance": 0.0
+    },
+    "exchange": {
+        "name": "binance",
+        "key": "",
+        "secret": "",
+        "pair_whitelist": ["BTC/USDT"],
+        "pair_blacklist": []
+    },
+    "telegram": {
+        "enabled": true,
+        "token": "8517504737:AAELKyE2jC48Ql1d1opfEy8ZMfU5UifB6kA",
+        "chat_id": "1007321485",
+        "notification_settings": {
+            "status": "on",
+            "warning": "on", 
+            "startup": "on",
+            "entry": "on",
+            "exit": "on",
+            "show_candle": "on",
+            "strategy_msg": "on"
+        }
+    },
+    "api_server": {
+        "enabled": true,
+        "listen_ip_address": "127.0.0.1",
+        "listen_port": 8080,
+        "username": "freqtrade",
+        "password": "freqtrade",
+        "jwt_secret_key": "supersecret",
+        "CORS_origins": [],
+        "ws_token": "wstoken"
+    },
+    "pairlists": [
+        {
+            "method": "StaticPairList"
+        }
+    ]
+}
