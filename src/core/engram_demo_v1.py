@@ -33,7 +33,13 @@ import numpy as np
 import torch
 import torch.nn as nn
 from transformers import AutoTokenizer
-from tokenizers import normalizers, Regex 
+from tokenizers import normalizers, Regex
+import asyncio
+import websockets
+import json
+import threading
+import time
+import requests
 
 @dataclass
 class EngramConfig:
@@ -395,27 +401,205 @@ class TransformerBlock(nn.Module):
         hidden_states = self.moe(hidden_states) + hidden_states
         return hidden_states
 
+class ClawdBotClient:
+    def __init__(self, ws_url="ws://127.0.0.1:18789"):
+        self.ws_url = ws_url
+        self.connected = False
+        self.session_id = None
+        self.loop = None
+        self.thread = None
+
+    def start(self):
+        """Start the WebSocket client in a background thread."""
+        self.loop = asyncio.new_event_loop()
+        self.thread = threading.Thread(target=self._run_loop, daemon=True)
+        self.thread.start()
+        time.sleep(1)  # Wait for connection
+
+    def _run_loop(self):
+        asyncio.set_event_loop(self.loop)
+        self.loop.run_until_complete(self._connect())
+
+    async def _connect(self):
+        try:
+            async with websockets.connect(self.ws_url) as websocket:
+                self.websocket = websocket
+                self.connected = True
+                print("Connected to ClawdBot Gateway")
+                # Send hello
+                await websocket.send(json.dumps({
+                    "type": "hello",
+                    "version": "1",
+                    "userAgent": "EngramClient/1.0"
+                }))
+                await self._listen()
+        except Exception as e:
+            print(f"ClawdBot connection failed: {e}")
+            self.connected = False
+
+    async def _listen(self):
+        try:
+            async for message in self.websocket:
+                data = json.loads(message)
+                if data.get("type") == "hello":
+                    self.session_id = data.get("sessionId")
+                    print(f"ClawdBot session: {self.session_id}")
+        except Exception as e:
+            print(f"ClawdBot listen error: {e}")
+
+    def send_message(self, message, timeout=10):
+        """Send a message to ClawdBot and get response."""
+        if not self.connected:
+            return "ClawdBot not connected"
+
+        future = asyncio.run_coroutine_threadsafe(
+            self._send_message_async(message), self.loop
+        )
+        try:
+            return future.result(timeout=timeout)
+        except Exception as e:
+            return f"Error: {e}"
+
+    async def _send_message_async(self, message):
+        if not self.websocket:
+            return "No websocket"
+
+        # Send message
+        await self.websocket.send(json.dumps({
+            "type": "message",
+            "sessionId": self.session_id,
+            "message": message,
+            "thinking": "high"
+        }))
+
+        # Wait for response
+        response_text = ""
+        try:
+            async for msg in self.websocket:
+                data = json.loads(msg)
+                if data.get("type") == "chunk":
+                    if data.get("text"):
+                        response_text += data["text"]
+                    if data.get("done"):
+                        break
+                elif data.get("type") == "message":
+                    if data.get("text"):
+                        response_text = data["text"]
+                    break
+        except Exception as e:
+            return f"Response error: {e}"
+
+        return response_text
+
 class EngramModel(nn.Module):
-    def __init__(self):
+    def __init__(self, use_clawdbot=False, clawdbot_ws_url="ws://127.0.0.1:18789", use_lmstudio=False, lmstudio_url="http://192.168.56.1:1234"):
         super().__init__()
-        self.tokenizer = AutoTokenizer.from_pretrained(engram_cfg.tokenizer_name_or_path, trust_remote_code=True)
-        self.embedding = nn.Embedding(backbone_config.vocab_size, backbone_config.hidden_size)
-        self.layers = nn.ModuleList([TransformerBlock(layer_id=layer_id) for layer_id in range(backbone_config.num_layers)])
-        self.head = nn.Linear(backbone_config.hidden_size, backbone_config.vocab_size)
+        self.use_clawdbot = use_clawdbot
+        self.use_lmstudio = use_lmstudio
+        self.lmstudio_url = lmstudio_url
+
+        if self.use_clawdbot:
+            self.clawdbot = ClawdBotClient(clawdbot_ws_url)
+            self.clawdbot.start()
+        elif self.use_lmstudio:
+            # LMStudio mode - no local model needed
+            pass
+        else:
+            self.tokenizer = AutoTokenizer.from_pretrained(engram_cfg.tokenizer_name_or_path, trust_remote_code=True)
+            self.embedding = nn.Embedding(backbone_config.vocab_size, backbone_config.hidden_size)
+            self.layers = nn.ModuleList([TransformerBlock(layer_id=layer_id) for layer_id in range(backbone_config.num_layers)])
+            self.head = nn.Linear(backbone_config.hidden_size, backbone_config.vocab_size)
 
     def forward(self, input_ids):
-        # Initial embedding
-        hidden_states = self.embedding(input_ids)
-        # Mock hyper-connection expansion (B, L, HC_MULT, D)
-        hidden_states = hidden_states.unsqueeze(2).expand(-1, -1, backbone_config.hc_mult, -1)
-        
-        for layer in self.layers:
-            hidden_states = layer(input_ids=input_ids, hidden_states=hidden_states)
-            
-        # Mock hyper-connection collapse for the head
-        hidden_states = hidden_states[:, :, 0, :]
-        logits = self.head(hidden_states)
-        return logits
+        if self.use_clawdbot or self.use_lmstudio:
+            # For external models, return dummy logits for compatibility
+            # In practice, this forward might not be used when external models are enabled
+            B, L = input_ids.shape
+            return torch.randn(B, L, backbone_config.vocab_size)
+        else:
+            # Initial embedding
+            hidden_states = self.embedding(input_ids)
+            # Mock hyper-connection expansion (B, L, HC_MULT, D)
+            hidden_states = hidden_states.unsqueeze(2).expand(-1, -1, backbone_config.hc_mult, -1)
+
+            for layer in self.layers:
+                hidden_states = layer(input_ids=input_ids, hidden_states=hidden_states)
+
+            # Mock hyper-connection collapse for the head
+            hidden_states = hidden_states[:, :, 0, :]
+            logits = self.head(hidden_states)
+            return logits
+
+    def analyze_market(self, market_data, prompt_template="Analyze this market data and provide trading signals: {data}"):
+        """Use external model (ClawdBot or LMStudio) for market analysis."""
+        if self.use_clawdbot:
+            if not self.clawdbot.connected:
+                return {"signal": "HOLD", "confidence": 0.5, "reason": "ClawdBot not available"}
+
+            prompt = prompt_template.format(data=str(market_data))
+            response = self.clawdbot.send_message(prompt)
+
+        elif self.use_lmstudio:
+            prompt = prompt_template.format(data=str(market_data))
+            response = self._query_lmstudio(prompt)
+
+        else:
+            return {"signal": "HOLD", "confidence": 0.5, "reason": "No external model configured"}
+
+        # Parse response for signal
+        response_lower = response.lower()
+        if "buy" in response_lower and "sell" not in response_lower:
+            signal = "BUY"
+        elif "sell" in response_lower:
+            signal = "SELL"
+        else:
+            signal = "HOLD"
+
+        return {
+            "signal": signal,
+            "confidence": 0.8,  # Default high confidence
+            "reason": response[:200]  # Truncate reason
+        }
+
+    def _query_lmstudio(self, prompt):
+        """Query LMStudio API for response."""
+        try:
+            url = f"{self.lmstudio_url}/v1/chat/completions"
+            data = {
+                "model": "deepseek/deepseek-r1-0528-qwen3-8b",
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "You are a trading analysis AI. Analyze market data and provide clear trading signals."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                "temperature": 0.7,
+                "max_tokens": 500,
+                "stream": False
+            }
+
+
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer dummy"
+            }
+
+            response = requests.post(url, json=data, headers=headers, timeout=30)
+            response.raise_for_status()
+
+            result = response.json()
+            message = result['choices'][0]['message']
+            # Handle different response formats
+            content = message.get('content', '')
+            if not content and 'reasoning_content' in message:
+                content = message['reasoning_content']
+            return content
+        except Exception as e:
+            return f"LMStudio query failed: {str(e)}"
 
     @torch.no_grad()
     def generate(self, prompt: str, max_new_tokens: int = 50):
@@ -430,7 +614,8 @@ class EngramModel(nn.Module):
         return self.tokenizer.decode(input_ids[0], skip_special_tokens=True)
 
 if __name__ == '__main__':
-    model = EngramModel()
+    # Use LMStudio mode with your local model
+    model = EngramModel(use_lmstudio=True, lmstudio_url="http://192.168.56.1:1234")
 
     text = "Only Alexander the Great could tame the horse Bucephalus."
     tokenizer = AutoTokenizer.from_pretrained(engram_cfg.tokenizer_name_or_path,trust_remote_code=True)
@@ -443,4 +628,20 @@ if __name__ == '__main__':
 
     print("✅ Forward Complete!")
     print(f"{input_ids.shape=}\n{logits.shape=}")
+
+    # Test market analysis with local LMStudio model
+    print("\n🔍 Testing market analysis with local LMStudio model...")
+    market_data = {
+        "symbol": "BTC/USD",
+        "price": 43250.00,
+        "volume": 1234567,
+        "rsi": 65.4,
+        "macd": 150.2,
+        "trend": "bullish"
+    }
+    
+    analysis = model.analyze_market(market_data)
+    print(f"Trading Signal: {analysis['signal']}")
+    print(f"Confidence: {analysis['confidence']}")
+    print(f"Reason: {analysis['reason']}")
             

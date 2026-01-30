@@ -25,10 +25,7 @@ from freqtrade.exchange import timeframe_to_minutes
 from freqtrade.data.dataprovider import DataProvider
 
 # Import Engram components
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from engram_demo_v1 import EngramModel, engram_cfg, backbone_config
+from core.engram_demo_v1 import EngramModel, engram_cfg, backbone_config
 
 
 logger = logging.getLogger(__name__)
@@ -241,13 +238,29 @@ class EngramStrategy(IStrategy):
         """Initialize the Engram model for neural analysis."""
         try:
             logger.info("Initializing Engram model...")
-            
-            # Load Engram model (you may want to use a pre-trained model here)
-            self.engram_model = EngramModel()
+
+            # Check model configuration
+            use_clawdbot = self.config.get('engram', {}).get('use_clawdbot', False)
+            use_lmstudio = self.config.get('engram', {}).get('use_lmstudio', False)
+            clawdbot_ws_url = self.config.get('engram', {}).get('clawdbot_ws_url', "ws://127.0.0.1:18789")
+            lmstudio_url = self.config.get('engram', {}).get('lmstudio_url', "http://192.168.56.1:1234")
+
+            # Load Engram model
+            self.engram_model = EngramModel(
+                use_clawdbot=use_clawdbot,
+                use_lmstudio=use_lmstudio,
+                clawdbot_ws_url=clawdbot_ws_url,
+                lmstudio_url=lmstudio_url
+            )
             self.engram_initialized = True
-            
-            logger.info("Engram model initialized successfully")
-            
+
+            if use_clawdbot:
+                logger.info("Engram model initialized with ClawdBot integration")
+            elif use_lmstudio:
+                logger.info("Engram model initialized with LMStudio integration")
+            else:
+                logger.info("Engram model initialized with local neural network")
+
         except Exception as e:
             logger.error(f"Failed to initialize Engram model: {e}")
             self.engram_initialized = False
@@ -321,35 +334,51 @@ class EngramStrategy(IStrategy):
         Generate trading signals using Engram model.
         """
         try:
-            # This is a simplified implementation
-            # In a production system, you would use more sophisticated analysis
-            
-            # For demonstration, we'll create pseudo-signals based on text analysis
-            # Replace this with actual Engram model inference
-            
-            signals = {
-                'long_signal': 0.0,
-                'short_signal': 0.0,
-                'sentiment': 0.0,
-                'confidence': 0.0
-            }
-            
-            # Simple keyword-based sentiment analysis (for demo)
-            text_lower = market_text.lower()
-            
-            if 'oversold' in text_lower and 'high volume' in text_lower:
-                signals['long_signal'] = 0.8
-                signals['sentiment'] = 1.0
-                signals['confidence'] = 0.75
-            elif 'overbought' in text_lower and 'high volume' in text_lower:
-                signals['short_signal'] = 0.8
-                signals['sentiment'] = -1.0
-                signals['confidence'] = 0.75
+            if hasattr(self.engram_model, 'use_clawdbot') and self.engram_model.use_clawdbot:
+                # Use ClawdBot for analysis
+                analysis = self.engram_model.analyze_market(market_text)
+                signals = {
+                    'long_signal': 0.8 if analysis['signal'] == 'BUY' else 0.0,
+                    'short_signal': 0.8 if analysis['signal'] == 'SELL' else 0.0,
+                    'sentiment': 1.0 if analysis['signal'] == 'BUY' else (-1.0 if analysis['signal'] == 'SELL' else 0.0),
+                    'confidence': analysis['confidence']
+                }
+                logger.info(f"ClawdBot analysis: {analysis}")
+            elif hasattr(self.engram_model, 'use_lmstudio') and self.engram_model.use_lmstudio:
+                # Use LMStudio for analysis
+                analysis = self.engram_model.analyze_market(market_text)
+                signals = {
+                    'long_signal': 0.8 if analysis['signal'] == 'BUY' else 0.0,
+                    'short_signal': 0.8 if analysis['signal'] == 'SELL' else 0.0,
+                    'sentiment': 1.0 if analysis['signal'] == 'BUY' else (-1.0 if analysis['signal'] == 'SELL' else 0.0),
+                    'confidence': analysis['confidence']
+                }
+                logger.info(f"LMStudio analysis: {analysis}")
             else:
-                signals['confidence'] = 0.3  # Low confidence for neutral markets
-            
+                # Fallback to simplified implementation
+                signals = {
+                    'long_signal': 0.0,
+                    'short_signal': 0.0,
+                    'sentiment': 0.0,
+                    'confidence': 0.0
+                }
+
+                # Simple keyword-based sentiment analysis (for demo)
+                text_lower = market_text.lower()
+
+                if 'oversold' in text_lower and 'high volume' in text_lower:
+                    signals['long_signal'] = 0.8
+                    signals['sentiment'] = 1.0
+                    signals['confidence'] = 0.75
+                elif 'overbought' in text_lower and 'high volume' in text_lower:
+                    signals['short_signal'] = 0.8
+                    signals['sentiment'] = -1.0
+                    signals['confidence'] = 0.75
+                else:
+                    signals['confidence'] = 0.3  # Low confidence for neutral markets
+
             return signals
-            
+
         except Exception as e:
             logger.error(f"Error generating Engram signals: {e}")
             return {}

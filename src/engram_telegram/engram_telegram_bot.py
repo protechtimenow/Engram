@@ -42,10 +42,7 @@ from freqtrade.enums import SignalDirection, TradingMode
 from freqtrade.data.dataprovider import DataProvider
 
 # Import Engram components
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from engram_demo_v1 import EngramModel, engram_cfg
+from src.core.engram_demo_v1 import EngramModel, engram_cfg
 
 
 logger = logging.getLogger(__name__)
@@ -80,7 +77,25 @@ class EngramTelegramBot:
         try:
             if self.engram_config.get('enabled', False):
                 logger.info("Initializing Engram model for Telegram bot...")
-                self.engram_model = EngramModel()
+
+                # Check if using external models (ClawdBot or LMStudio)
+                use_clawdbot = self.engram_config.get('use_clawdbot', False)
+                use_lmstudio = self.engram_config.get('use_lmstudio', False)
+                lmstudio_url = self.engram_config.get('lmstudio_url', 'http://localhost:1234')
+                clawdbot_ws_url = self.engram_config.get('clawdbot_ws_url', 'ws://127.0.0.1:18789')
+
+                if use_clawdbot or use_lmstudio:
+                    logger.info(f"Using external model - ClawdBot: {use_clawdbot}, LMStudio: {use_lmstudio}")
+                    self.engram_model = EngramModel(
+                        use_clawdbot=use_clawdbot,
+                        clawdbot_ws_url=clawdbot_ws_url,
+                        use_lmstudio=use_lmstudio,
+                        lmstudio_url=lmstudio_url
+                    )
+                else:
+                    logger.info("Using local Engram model")
+                    self.engram_model = EngramModel()
+
                 self.engram_initialized = True
                 logger.info("Engram model initialized for Telegram bot")
             else:
@@ -420,78 +435,54 @@ Type `/help` for more information or start with `/analysis` to see AI insights!
         }
 
     async def _process_natural_query(self, query: str, user_id: int) -> str:
-        """Process natural language trading query using Engram."""
-        # Get user context
-        context = self.user_contexts.get(user_id, {})
-        
-        # This would integrate with Engram for NLP processing
-        # For now, providing rule-based responses
-        
-        query_lower = query.lower()
-        
-        if 'buy' in query_lower and 'btc' in query_lower:
-            return """
-💬 *AI Analysis for BTC Purchase Request*
+        """Process natural language trading query using Engram/ClawdBot/LMStudio."""
+        if not self.engram_initialized or not self.engram_model:
+            return "❌ AI processing unavailable. Engram model not initialized."
 
-📊 *Current Market Analysis:*
-• BTC showing bullish momentum on 4H timeframe
-• RSI at 45 (neutral zone, room for upside)
-• Volume increasing steadily
-• Support level at $42,500
+        try:
+            # Use Engram model for analysis
+            # For chat queries, we'll use the analyze_market method with a formatted prompt
+            prompt = f"User trading question: {query}\n\nPlease provide a helpful, natural language response about trading and market analysis."
 
-🧠 *Neural Pattern Recognition:*
-• Detecting accumulation pattern
-• Sentiment analysis: Positive (68%)
-• Predictive confidence: High (75%)
+            # Get response from external model (ClawdBot or LMStudio)
+            if hasattr(self.engram_model, 'use_clawdbot') and self.engram_model.use_clawdbot:
+                response = self.engram_model.clawdbot.send_message(prompt)
+            elif hasattr(self.engram_model, 'use_lmstudio') and self.engram_model.use_lmstudio:
+                response = self.engram_model._query_lmstudio(prompt)
+            else:
+                # Fallback to local model if available
+                response = "Local Engram model response not implemented for chat queries."
 
-💡 *Recommendation:*
-✅ Consider entering on dip to $42,800-43,000
-📈 Target: $48,000-50,000
-⚠️ Stop-loss: $41,500
+            # Format the response nicely for Telegram
+            formatted_response = f"""
+💬 *AI Trading Assistant Response*
 
-*Risk Level: Medium*
+🤔 *Your Question:* {query}
+
+🧠 *AI Analysis:*
+{response[:1500]}  # Limit response length for Telegram
+
+💡 *Need more details?* Try specific commands like:
+• `/analysis` - Market analysis
+• `/predict` - AI predictions
+• `/portfolio_insights` - Portfolio review
             """
-        
-        elif 'market sentiment' in query_lower:
-            return """
-💬 *Current Market Sentiment Analysis*
 
-🔍 *Overall Sentiment:* Slightly Bullish (62%)
-• Fear & Greed Index: 58 (Greed)
-• Social Media Sentiment: Positive
-• On-chain Metrics: Accumulation
+            return formatted_response
 
-📊 *Asset Class Performance:*
-• Large Caps: Strong (BTC, ETH)
-• DeFi: Consolidating
-• Meme Coins: Volatile
-
-🧠 *AI Prediction:*
-Market likely to trend upward over next 48-72 hours with moderate volatility.
-            """
-        
-        else:
+        except Exception as e:
+            logger.error(f"Error processing natural query: {e}")
             return f"""
-💬 *AI Response to Your Query:*
+❌ *Error Processing Query*
 
-🤔 I analyzed your request: "{query}"
+Sorry, I encountered an issue while processing your question: "{query}"
 
-🧠 *My Analysis:*
-I'm processing your query using advanced neural networks and pattern recognition.
-For the most accurate response, I recommend:
+Please try again or use specific commands like:
+• `/analysis` for market insights
+• `/predict` for AI predictions
+• `/status` for system status
 
-📊 *Specific Questions I Can Answer:*
-• Buy/sell recommendations for specific pairs
-• Risk analysis of current positions
-• Market timing predictions
-• Portfolio optimization suggestions
-
-💡 *Try Asking:*
-• "Should I buy ETH at current levels?"
-• "What's the risk in my current positions?"
-• "Analyze BTC for the next 24 hours"
-
-Type `/predict` for AI-powered trading predictions!
+*Error:* {str(e)[:100]}
             """
 
     async def _generate_trading_predictions(self) -> Dict:
@@ -539,25 +530,33 @@ Type `/predict` for AI-powered trading predictions!
     async def handle_text_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle regular text messages with natural language processing."""
         if not self.engram_initialized:
+            await update.message.reply_text(
+                "❌ AI processing unavailable. Please use command-based interactions.",
+                parse_mode=ParseMode.MARKDOWN
+            )
             return
-        
+
         user_text = update.message.text
         user_id = update.effective_user.id
-        
+
         # Check if this looks like a trading query
-        trading_keywords = ['buy', 'sell', 'trade', 'market', 'price', 'analysis', 'predict']
-        if any(keyword in user_text.lower() for keyword in trading_keywords):
-            # Process as a trading query
+        trading_keywords = ['buy', 'sell', 'trade', 'market', 'price', 'analysis', 'predict', 'should', 'what', 'how', 'when']
+        is_trading_query = any(keyword in user_text.lower() for keyword in trading_keywords)
+
+        if is_trading_query or len(user_text.split()) > 3:  # Process longer messages or trading-related
+            # Process as a trading query using AI
             response = await self._process_natural_query(user_text, user_id)
             await update.message.reply_text(response, parse_mode=ParseMode.MARKDOWN)
         else:
-            # Regular chat message
+            # Short non-trading message - provide helpful guidance
             await update.message.reply_text(
-                "💬 *I'm here to help with trading questions!*\n\n"
-                "Type `/chat` with your question or try:\n"
-                "• /analysis for market insights\n"
-                "• /predict for AI predictions\n"
-                "• /portfolio_insights for portfolio analysis",
+                "💬 *I'm your AI trading assistant!*\n\n"
+                "Ask me anything about trading, markets, or your portfolio!\n\n"
+                "*Examples:*\n"
+                "• \"Should I buy BTC now?\"\n"
+                "• \"What's the market doing?\"\n"
+                "• \"Analyze my ETH position\"\n\n"
+                "Or use commands like `/analysis`, `/predict`, `/status`",
                 parse_mode=ParseMode.MARKDOWN
             )
 

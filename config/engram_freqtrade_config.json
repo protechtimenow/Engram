@@ -62,7 +62,11 @@
   },
   "engram": {
     "enabled": true,
-    "model_path": "./engram_demo_v1.py",
+    "use_clawdbot": true,
+    "use_lmstudio": true,
+    "lmstudio_url": "http://192.168.56.1:1234",
+    "clawdbot_ws_url": "ws://127.0.0.1:18789",
+    "model_path": "./src/core/engram_demo_v1.py",
     "max_ngram_size": 3,
     "n_embed_per_ngram": 512,
     "n_head_per_ngram": 8,
@@ -81,10 +85,10 @@
       }
     }
   },
-  "telegram": {
-    "enabled": true,
-    "token": "YOUR_TELEGRAM_BOT_TOKEN",
-    "chat_id": "YOUR_CHAT_ID",
+    "telegram": {
+        "enabled": true,
+        "token": "8517504737:AAELKyE2jC48Ql1d1opfEy8ZMfU5UifB6kA",
+        "chat_id": "1007321485",
     "notification_settings": {
       "status": "on",
       "warning": "on",

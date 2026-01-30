@@ -26,23 +26,31 @@ import logging
 import argparse
 from pathlib import Path
 
-# Add current directory to Python path for imports
+# Add current directory and src/ to Python path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src'))
+
+print("DEBUG sys.path:", sys.path)
+print("DEBUG current dir:", os.getcwd())
 
 try:
     import sys
-    sys.path.insert(0, '/home/offstar0/.local/lib/python3.12/site-packages')
-    
+    import os
+    sys.path.insert(0, '/home/offstar0/.local/lib/python3.13/site-packages')
+    # Add freqtrade directory for development install
+    freqtrade_path = os.path.join(os.path.dirname(__file__), '..', 'freqtrade')
+    sys.path.insert(0, freqtrade_path)
+
     from freqtrade.configuration.configuration import Configuration
     from freqtrade.freqtradebot import FreqtradeBot
     from freqtrade.rpc.rpc_manager import RPCManager
     from freqtrade.persistence import Trade
     from freqtrade.data.dataprovider import DataProvider
-    
+
     # Import our custom components
-    from engram_trading_strategy import EngramStrategy
-    from engram_telegram_bot import EngramTelegramBot
-    from engram_demo_v1 import EngramModel, engram_cfg
+    from src.trading.engram_trading_strategy import EngramStrategy
+    from src.telegram.engram_telegram_bot import EngramTelegramBot
+    from src.core.engram_demo_v1 import EngramModel, engram_cfg
     
 except ImportError as e:
     print(f"❌ Import error: {e}")
@@ -86,7 +94,7 @@ class EngramFreqTrader:
 
     def _load_configuration(self, config_path: str):
         """Load configuration from file."""
-        default_config = Path(__file__).parent / "engram_freqtrade_config.json"
+        default_config = Path(__file__).parent.parent / "config" / "engram_freqtrade_config.json"
         
         if config_path is None:
             config_path = default_config
@@ -103,8 +111,8 @@ class EngramFreqTrader:
             freqtrade_config['telegram'] = full_config.get('telegram', {})
             freqtrade_config['api_server'] = full_config.get('api_server', {})
             
-            # Set strategy path to current directory
-            freqtrade_config['strategy_path'] = str(Path(__file__).parent)
+            # Set strategy path to project root directory
+            freqtrade_config['strategy_path'] = str(Path(__file__).parent.parent)
             
             # Initialize FreqTrade configuration
             self.config = Configuration.from_files([config_path], freqtrade_config)
