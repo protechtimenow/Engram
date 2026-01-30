@@ -119,7 +119,7 @@ class InteractiveBotTester:
     async def run_interactive_tests(self):
         """Run comprehensive interactive tests"""
         logger.info("🚀 Starting Interactive Bot Tests")
-        logger.info(f"📱 Phone: +447585185906")
+        logger.info(f"📱 Phone: 07585185906")
         logger.info(f"🕐 Time: {datetime.now()}")
         
         # Clear old updates

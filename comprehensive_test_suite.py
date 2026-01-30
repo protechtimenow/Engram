@@ -29,7 +29,7 @@ class ComprehensiveTestSuite:
         self.chat_id = '1007321485'
         self.base_url = f'https://api.telegram.org/bot{self.token}'
         self.test_results = []
-        self.phone_number = '+447585185906'
+        self.phone_number = '07585185906'
         
     def send_telegram_message(self, text: str) -> Dict:
         """Send message via Telegram API"""
