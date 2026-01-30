@@ -1,0 +1,215 @@
+{
+  "start_time": "2026-01-30T23:38:20.273565",
+  "end_time": "2026-01-30T23:38:23.703113",
+  "total_tests": 25,
+  "passed": 22,
+  "failed": 3,
+  "skipped": 0,
+  "phases": {
+    "Phase1_CriticalPath": {
+      "passed": 12,
+      "failed": 0,
+      "tests": [
+        {
+          "phase": "Phase1_CriticalPath",
+          "test": "Telegram config file exists and valid JSON",
+          "passed": true,
+          "details": "Token present: True, Chat ID present: True",
+          "timestamp": "2026-01-30T23:38:20.273676"
+        },
+        {
+          "phase": "Phase1_CriticalPath",
+          "test": "Telegram credentials present",
+          "passed": true,
+          "details": "Token: 8517504737:AAELKyE2j..., Chat ID: 1007321485",
+          "timestamp": "2026-01-30T23:38:20.273688"
+        },
+        {
+          "phase": "Phase1_CriticalPath",
+          "test": ".env file exists with Telegram vars",
+          "passed": true,
+          "details": "Token var: True, Chat var: True",
+          "timestamp": "2026-01-30T23:38:20.273724"
+        },
+        {
+          "phase": "Phase1_CriticalPath",
+          "test": "Python version >= 3.8",
+          "passed": true,
+          "details": "Python 3.9.25",
+          "timestamp": "2026-01-30T23:38:20.273742"
+        },
+        {
+          "phase": "Phase1_CriticalPath",
+          "test": "Directory 'src' exists",
+          "passed": true,
+          "details": "Path: /vercel/sandbox/src",
+          "timestamp": "2026-01-30T23:38:20.273770"
+        },
+        {
+          "phase": "Phase1_CriticalPath",
+          "test": "Directory 'config' exists",
+          "passed": true,
+          "details": "Path: /vercel/sandbox/config",
+          "timestamp": "2026-01-30T23:38:20.273791"
+        },
+        {
+          "phase": "Phase1_CriticalPath",
+          "test": "Directory 'logs' exists",
+          "passed": true,
+          "details": "Path: /vercel/sandbox/logs",
+          "timestamp": "2026-01-30T23:38:20.273809"
+        },
+        {
+          "phase": "Phase1_CriticalPath",
+          "test": "Package 'telegram' importable",
+          "passed": true,
+          "details": "Successfully imported",
+          "timestamp": "2026-01-30T23:38:20.345095"
+        },
+        {
+          "phase": "Phase1_CriticalPath",
+          "test": "Package 'asyncio' importable",
+          "passed": true,
+          "details": "Successfully imported",
+          "timestamp": "2026-01-30T23:38:20.345117"
+        },
+        {
+          "phase": "Phase1_CriticalPath",
+          "test": "Package 'websockets' importable",
+          "passed": true,
+          "details": "Successfully imported",
+          "timestamp": "2026-01-30T23:38:20.349001"
+        },
+        {
+          "phase": "Phase1_CriticalPath",
+          "test": "Package 'json' importable",
+          "passed": true,
+          "details": "Successfully imported",
+          "timestamp": "2026-01-30T23:38:20.349021"
+        },
+        {
+          "phase": "Phase1_CriticalPath",
+          "test": "Package 'pathlib' importable",
+          "passed": true,
+          "details": "Successfully imported",
+          "timestamp": "2026-01-30T23:38:20.349028"
+        }
+      ]
+    },
+    "Phase2_Integration": {
+      "passed": 1,
+      "failed": 3,
+      "tests": [
+        {
+          "phase": "Phase2_Integration",
+          "test": "LMStudio API accessible",
+          "passed": false,
+          "details": "Connection error: HTTPConnectionPool(host='192.168.56.1', port=1234): Max retries exceeded with url: /v1/models (Caused by NewConnectionError(\"HTTPConnection(host='192.168.56.1', port=1234): Failed to establish a new connection: [Errno 113] No route to host\"))",
+          "timestamp": "2026-01-30T23:38:23.429183"
+        },
+        {
+          "phase": "Phase2_Integration",
+          "test": "ClawdBot WebSocket connection",
+          "passed": false,
+          "details": "__aenter__",
+          "timestamp": "2026-01-30T23:38:23.438106"
+        },
+        {
+          "phase": "Phase2_Integration",
+          "test": "Engram model file exists",
+          "passed": true,
+          "details": "Path: src/core/engram_demo_v1.py",
+          "timestamp": "2026-01-30T23:38:23.438165"
+        },
+        {
+          "phase": "Phase2_Integration",
+          "test": "Engram model importable",
+          "passed": false,
+          "details": "No module named 'torch'",
+          "timestamp": "2026-01-30T23:38:23.643428"
+        }
+      ]
+    },
+    "Phase3_TelegramBot": {
+      "passed": 4,
+      "failed": 0,
+      "tests": [
+        {
+          "phase": "Phase3_TelegramBot",
+          "test": "Bot file 'live_telegram_bot.py' exists",
+          "passed": true,
+          "details": "Path: /vercel/sandbox/live_telegram_bot.py",
+          "timestamp": "2026-01-30T23:38:23.643580"
+        },
+        {
+          "phase": "Phase3_TelegramBot",
+          "test": "Bot file 'live_clawdbot_bot.py' exists",
+          "passed": true,
+          "details": "Path: /vercel/sandbox/live_clawdbot_bot.py",
+          "timestamp": "2026-01-30T23:38:23.643613"
+        },
+        {
+          "phase": "Phase3_TelegramBot",
+          "test": "Bot file 'simple_telegram_bot.py' exists",
+          "passed": true,
+          "details": "Path: /vercel/sandbox/simple_telegram_bot.py",
+          "timestamp": "2026-01-30T23:38:23.643640"
+        },
+        {
+          "phase": "Phase3_TelegramBot",
+          "test": "Telegram Bot object creation",
+          "passed": true,
+          "details": "Bot instance created successfully",
+          "timestamp": "2026-01-30T23:38:23.701555"
+        }
+      ]
+    },
+    "Phase4_Persistence": {
+      "passed": 3,
+      "failed": 0,
+      "tests": [
+        {
+          "phase": "Phase4_Persistence",
+          "test": "Bot script exists",
+          "passed": true,
+          "details": "Path: /vercel/sandbox/live_clawdbot_bot.py",
+          "timestamp": "2026-01-30T23:38:23.702642"
+        },
+        {
+          "phase": "Phase4_Persistence",
+          "test": "Bot script has shebang",
+          "passed": true,
+          "details": "First line: #!/usr/bin/env python3",
+          "timestamp": "2026-01-30T23:38:23.702709"
+        },
+        {
+          "phase": "Phase4_Persistence",
+          "test": "Process manager script created",
+          "passed": true,
+          "details": "Created: clawdbot_manager.sh",
+          "timestamp": "2026-01-30T23:38:23.702879"
+        }
+      ]
+    },
+    "Phase5_EdgeCases": {
+      "passed": 2,
+      "failed": 0,
+      "tests": [
+        {
+          "phase": "Phase5_EdgeCases",
+          "test": "Invalid JSON detection",
+          "passed": true,
+          "details": "Correctly detected invalid JSON",
+          "timestamp": "2026-01-30T23:38:23.702994"
+        },
+        {
+          "phase": "Phase5_EdgeCases",
+          "test": "Missing module detection",
+          "passed": true,
+          "details": "Correctly detected missing module",
+          "timestamp": "2026-01-30T23:38:23.703104"
+        }
+      ]
+    }
+  }
+}
