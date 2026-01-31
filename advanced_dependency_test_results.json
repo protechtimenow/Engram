@@ -1,0 +1,143 @@
+{
+  "test_run": {
+    "timestamp": "2026-01-31T02:09:04.482747",
+    "suite": "Advanced Dependency Tests"
+  },
+  "tests": [
+    {
+      "name": "NumPy Import & Operations",
+      "status": "PASS",
+      "message": "NumPy 2.0.2 working correctly",
+      "details": {
+        "version": "2.0.2",
+        "mean": 3.0,
+        "std": 1.4142135623730951
+      },
+      "timestamp": "2026-01-31T02:09:04.534993"
+    },
+    {
+      "name": "SymPy Import & Symbolic Math",
+      "status": "PASS",
+      "message": "SymPy 1.14.0 working correctly",
+      "details": {
+        "version": "1.14.0",
+        "derivative": "2*x + 2"
+      },
+      "timestamp": "2026-01-31T02:09:04.833943"
+    },
+    {
+      "name": "WebSockets Import",
+      "status": "PASS",
+      "message": "WebSockets 15.0.1 available",
+      "details": {
+        "version": "15.0.1"
+      },
+      "timestamp": "2026-01-31T02:09:04.939851"
+    },
+    {
+      "name": "Telegram Bot Library Import",
+      "status": "PASS",
+      "message": "python-telegram-bot 22.5 available",
+      "details": {
+        "version": "22.5"
+      },
+      "timestamp": "2026-01-31T02:09:05.120335"
+    },
+    {
+      "name": "Requests Library Import",
+      "status": "PASS",
+      "message": "Requests 2.32.5 available",
+      "details": {
+        "version": "2.32.5"
+      },
+      "timestamp": "2026-01-31T02:09:05.250177"
+    },
+    {
+      "name": "PSUtil Import & System Monitoring",
+      "status": "PASS",
+      "message": "PSUtil 7.2.2 working correctly",
+      "details": {
+        "version": "7.2.2",
+        "cpu_percent": 0.0,
+        "memory_percent": 12.5,
+        "memory_available_mb": 7352.4453125
+      },
+      "timestamp": "2026-01-31T02:09:05.457122"
+    },
+    {
+      "name": "NumPy Advanced Trading Calculations",
+      "status": "PASS",
+      "message": "Successfully calculated technical indicators",
+      "details": {
+        "sma_20_length": 981,
+        "volatility": 29.082609913926557,
+        "sharpe_ratio": 0.13631480839459256
+      },
+      "timestamp": "2026-01-31T02:09:05.561510"
+    },
+    {
+      "name": "SymPy Financial Mathematics",
+      "status": "PASS",
+      "message": "Successfully performed symbolic financial calculations",
+      "details": {
+        "compound_interest_formula": "P*(r + 1)**t",
+        "derivative": "P*(r + 1)**t*log(r + 1)",
+        "result_10_years": 1628.894626777442
+      },
+      "timestamp": "2026-01-31T02:09:05.666480"
+    },
+    {
+      "name": "Concurrent NumPy Operations",
+      "status": "PASS",
+      "message": "Successfully processed 10 datasets concurrently",
+      "details": {
+        "datasets_processed": 10
+      },
+      "timestamp": "2026-01-31T02:09:05.769715"
+    },
+    {
+      "name": "Memory Efficiency Test",
+      "status": "PASS",
+      "message": "Memory increase: 0.05 MB",
+      "details": {
+        "memory_before_mb": 78.6953125,
+        "memory_after_mb": 78.7421875,
+        "memory_increase_mb": 0.046875
+      },
+      "timestamp": "2026-01-31T02:09:05.881469"
+    },
+    {
+      "name": "Telegram Bot Features",
+      "status": "PASS",
+      "message": "Telegram bot library features available",
+      "details": {
+        "classes_available": [
+          "Bot",
+          "Update",
+          "Application",
+          "CommandHandler"
+        ]
+      },
+      "timestamp": "2026-01-31T02:09:06.057596"
+    },
+    {
+      "name": "Requests Advanced Features",
+      "status": "PASS",
+      "message": "Advanced requests features (sessions, retries) available",
+      "details": {
+        "features": [
+          "Session",
+          "Retry",
+          "HTTPAdapter"
+        ]
+      },
+      "timestamp": "2026-01-31T02:09:06.159085"
+    }
+  ],
+  "summary": {
+    "total": 12,
+    "passed": 12,
+    "failed": 0,
+    "skipped": 0
+  }
+}
