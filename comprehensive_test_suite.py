@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Comprehensive Testing Suite for Clawdbot/Engram Telegram Bot
 Tests all functionality including persistence, commands, and integrations
@@ -14,10 +15,19 @@ import requests
 from datetime import datetime
 from typing import Dict, List, Tuple
 
-# Configure logging
+# Fix Windows console encoding
+if sys.platform == 'win32':
+    import codecs
+    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
+    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
+
+# Configure logging with UTF-8 encoding
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
 )
 logger = logging.getLogger(__name__)
 
@@ -423,13 +433,13 @@ Total Tests:    {total_tests}
         
         # Save report to file
         report_file = '/vercel/sandbox/test_report.txt'
-        with open(report_file, 'w') as f:
+        with open(report_file, 'w', encoding='utf-8') as f:
             f.write(report)
-        logger.info(f"📄 Report saved to: {report_file}")
+        logger.info(f"Report saved to: {report_file}")
         
         # Save JSON results
         json_file = '/vercel/sandbox/test_results.json'
-        with open(json_file, 'w') as f:
+        with open(json_file, 'w', encoding='utf-8') as f:
             json.dump({
                 'phone_number': self.phone_number,
                 'timestamp': datetime.now().isoformat(),
@@ -439,8 +449,8 @@ Total Tests:    {total_tests}
                     'failed': sum(1 for r in self.test_results if not r['passed'])
                 },
                 'results': self.test_results
-            }, f, indent=2)
-        logger.info(f"📄 JSON results saved to: {json_file}")
+            }, f, indent=2, ensure_ascii=False)
+        logger.info(f"JSON results saved to: {json_file}")
 
 
 async def main():

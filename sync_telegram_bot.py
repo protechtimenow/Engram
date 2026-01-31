@@ -1,12 +1,5 @@
-PS C:\Users\OFFRSTAR0\Engram> python sync_telegram_bot.py
-2026-01-26 07:25:00,354 - __main__ - INFO - 🚀 Starting synchronous Engram Telegram bot...
-2026-01-26 07:25:00,354 - __main__ - INFO - Testing LMStudio connection...
-2026-01-26 07:25:09,408 - __main__ - INFO - ✅ Engram model initialized with LMStudio
-2026-01-26 07:25:09,832 - __main__ - INFO - ✅ Telegram bot initialized
-2026-01-26 07:25:09,832 - __main__ - INFO - 🤖 Bot is running and listening for messages...
-2026-01-26 07:25:15,405 - __main__ - ERROR - Failed to get updates: {"ok":false,"error_code":409,"description":"Conflict: terminated by other getUpdates request; make sure that only one bot instance is running"}
-2026-01-26 07:25:20,685 - __main__ - ERROR - Failed to get updates: {"ok":false,"error_code":409,"description":"Conflict: terminated by other getUpdates request; make sure that only one bot instance is running"}
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Synchronous Telegram Bot with LMStudio - No asyncio conflicts
 """
@@ -17,10 +10,19 @@ import time
 import requests
 import json
 
+# Fix Windows console encoding
+if sys.platform == 'win32':
+    import codecs
+    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
+    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
+
 # Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    level=logging.INFO,
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
 )
 logger = logging.getLogger(__name__)
 
