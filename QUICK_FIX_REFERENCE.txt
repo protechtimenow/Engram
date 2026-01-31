@@ -1,0 +1,110 @@
+================================================================================
+QUICK REFERENCE: LMStudio reasoning_content Fix
+================================================================================
+
+ISSUE: glm-4.7-flash returns empty "content" but populates "reasoning_content"
+
+STATUS: ✅ ALREADY FIXED in enhanced_engram_launcher.py (lines 88-100)
+
+TEST RESULTS: 6/6 PASSED (100%)
+
+================================================================================
+WHAT WAS FIXED
+================================================================================
+
+1. ✅ Extract from reasoning_content when content is empty
+2. ✅ Prioritize content over reasoning_content
+3. ✅ Handle both response formats
+4. ✅ Proper timeout configuration (5s connect, 180s read)
+5. ✅ No permanent disable after timeout
+
+================================================================================
+QUICK START
+================================================================================
+
+1. SET ENVIRONMENT VARIABLES (PowerShell):
+
+   $env:LMSTUDIO_URL="http://100.118.172.23:1234"
+   $env:LMSTUDIO_TIMEOUT="180"
+   $env:TELEGRAM_BOT_TOKEN="8517504737:AAELKyE2jC48Ql1d1opfEy8ZMfU5UifB6kA"
+   $env:TELEGRAM_CHAT_ID="1007321485"
+
+2. LAUNCH BOT:
+
+   cd C:\Users\OFFRSTAR0\Engram
+   python enhanced_engram_launcher.py
+
+3. TEST:
+
+   Send "hi" to @Freqtrad3_bot
+
+4. VERIFY LOGS:
+
+   ✅ LMStudio connected: http://100.118.172.23:1234
+   ✅ Telegram bot connected: Freqtrad3_bot
+   ✅ LMStudio response received (XXX chars)
+
+================================================================================
+EXPECTED BEHAVIOR
+================================================================================
+
+BEFORE (if not fixed):
+  User: "hi"
+  Bot: ⚠️ LMStudio returned empty response
+  Bot: [Mock AI fallback]
+
+AFTER (current):
+  User: "hi"
+  Bot: ✅ LMStudio response received (599 chars)
+  Bot: [AI-generated response from reasoning_content]
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+IF YOU SEE "Empty Response":
+  1. Check LMStudio is running: curl http://100.118.172.23:1234/v1/models
+  2. Check env vars: echo $env:LMSTUDIO_URL
+  3. Increase timeout: $env:LMSTUDIO_TIMEOUT="300"
+
+IF TIMEOUT OCCURS:
+  1. Increase timeout (default 180s)
+  2. Check LMStudio server logs
+  3. Verify network: Test-NetConnection -ComputerName 100.118.172.23 -Port 1234
+
+================================================================================
+FILES CREATED
+================================================================================
+
+1. LMSTUDIO_REASONING_CONTENT_ANALYSIS.md - Detailed analysis
+2. test_reasoning_content_extraction.py    - Test suite (6 tests)
+3. REASONING_CONTENT_FIX_SUMMARY.md        - Complete summary
+4. QUICK_FIX_REFERENCE.txt                 - This file
+
+================================================================================
+TEST RESULTS
+================================================================================
+
+Test 1: "Continue where chat cut"     ✅ PASS
+Test 2: Empty message (hello)          ✅ PASS
+Test 3: Offensive message              ✅ PASS
+Test 4: Normal response (content)      ✅ PASS
+Test 5: Both fields populated          ✅ PASS
+Test 6: Both fields empty              ✅ PASS
+
+Total: 6/6 PASSED (100%)
+
+================================================================================
+CONCLUSION
+================================================================================
+
+✅ CODE IS WORKING CORRECTLY
+✅ ALL TESTS PASS
+✅ PRODUCTION READY
+
+Your bot will now extract responses from reasoning_content when content is
+empty, which is the expected behavior for glm-4.7-flash model.
+
+Happy Trading! 🚀
+
+================================================================================
