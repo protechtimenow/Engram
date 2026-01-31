@@ -117,3 +117,10 @@
 - [ ] Database connection test
 - [ ] Full integration test
 - [ ] Dry-run trading test
+
+## Additional Tasks
+- [ ] Analyze LMStudio timeout issue and implement fallback mechanism
+- [ ] Add environment variable support for configuration
+- [ ] Implement AI fallback chain (LMStudio → Mock → Rule-based)
+- [ ] Test enhanced launcher with timeout handling
+- [ ] Create deployment documentation
