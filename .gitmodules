@@ -1,0 +1,3 @@
+[submodule "clawdbot_repo"]
+	path = clawdbot_repo
+	url = git@github.com:protechtimenow/ClawdBOT.git
