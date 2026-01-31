@@ -240,11 +240,19 @@ class EnhancedEngramBot:
         # Load Engram model (optional)
         logger.info("Loading Engram neural model...")
         try:
-            from engram_demo_v1 import EngramModel
+            # Add src directory to Python path if not already there
+            import sys
+            from pathlib import Path
+            src_path = Path(__file__).parent / "src"
+            if str(src_path) not in sys.path:
+                sys.path.insert(0, str(src_path))
+            
+            from core.engram_demo_v1 import EngramModel
             self.engram_model = EngramModel()
             logger.info("✅ Engram model loaded")
         except Exception as e:
             logger.warning(f"⚠️ Engram model not available: {e}")
+            logger.debug(f"Import error details: {type(e).__name__}: {str(e)}")
             self.engram_model = None
             
         # Test Telegram connection
