@@ -243,16 +243,40 @@ class EnhancedEngramBot:
             # Add src directory to Python path if not already there
             import sys
             from pathlib import Path
-            src_path = Path(__file__).parent / "src"
-            if str(src_path) not in sys.path:
-                sys.path.insert(0, str(src_path))
+            
+            # Try multiple path resolution strategies
+            script_dir = Path(__file__).parent.resolve()
+            possible_src_paths = [
+                script_dir / "src",  # src relative to script
+                Path.cwd() / "src",  # src relative to current working directory
+                Path("src").resolve()  # src as absolute path from cwd
+            ]
+            
+            src_path = None
+            for path in possible_src_paths:
+                if path.exists() and (path / "core" / "engram_demo_v1.py").exists():
+                    src_path = path
+                    break
+            
+            if src_path is None:
+                raise ImportError("Could not locate src/core/engram_demo_v1.py")
+            
+            # Add to sys.path if not already there
+            src_path_str = str(src_path)
+            if src_path_str not in sys.path:
+                sys.path.insert(0, src_path_str)
+                logger.debug(f"Added to sys.path: {src_path_str}")
             
             from core.engram_demo_v1 import EngramModel
+            logger.debug("EngramModel class imported successfully")
             self.engram_model = EngramModel()
             logger.info("✅ Engram model loaded")
         except Exception as e:
             logger.warning(f"⚠️ Engram model not available: {e}")
-            logger.debug(f"Import error details: {type(e).__name__}: {str(e)}")
+            if logger.isEnabledFor(logging.DEBUG):
+                import traceback
+                logger.debug(f"Import error details: {type(e).__name__}: {str(e)}")
+                logger.debug(f"Full traceback:\n{traceback.format_exc()}")
             self.engram_model = None
             
         # Test Telegram connection
