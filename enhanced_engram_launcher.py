@@ -237,14 +237,47 @@ class EnhancedEngramBot:
         lmstudio_timeout = int(os.getenv('LMSTUDIO_TIMEOUT', '180'))  # 3 minutes default (was 10s)
         self.ai_backend = AIBackend(lmstudio_url, lmstudio_timeout)
         
-        # Load Engram model (optional)
+        # Load Engram model (optional) with robust path resolution
         logger.info("Loading Engram neural model...")
         try:
-            from engram_demo_v1 import EngramModel
+            # Multi-strategy path resolution for cross-platform compatibility
+            possible_src_paths = [
+                Path(__file__).parent.resolve() / "src",  # Strategy 1: Relative to script
+                Path.cwd() / "src",                        # Strategy 2: Relative to CWD
+                Path("src").resolve()                      # Strategy 3: Absolute from CWD
+            ]
+            
+            src_path = None
+            for path in possible_src_paths:
+                engram_file = path / "core" / "engram_demo_v1.py"
+                if path.exists() and engram_file.exists():
+                    src_path = path
+                    logger.info(f"✅ Found Engram model at: {engram_file}")
+                    break
+            
+            if src_path is None:
+                raise FileNotFoundError(
+                    "Could not locate src/core/engram_demo_v1.py in any of the expected locations:\n" +
+                    "\n".join(f"  - {p}" for p in possible_src_paths)
+                )
+            
+            # Add to path and import
+            sys.path.insert(0, str(src_path))
+            from core.engram_demo_v1 import EngramModel
+            
             self.engram_model = EngramModel()
-            logger.info("✅ Engram model loaded")
+            logger.info("✅ Engram model loaded successfully")
+            
+        except FileNotFoundError as e:
+            logger.warning(f"⚠️ Engram model file not found: {e}")
+            self.engram_model = None
+        except ImportError as e:
+            logger.warning(f"⚠️ Engram model import failed: {e}")
+            logger.warning(f"   sys.path: {sys.path[:3]}")
+            self.engram_model = None
         except Exception as e:
             logger.warning(f"⚠️ Engram model not available: {e}")
+            logger.warning(f"   Full traceback:", exc_info=True)
             self.engram_model = None
             
         # Test Telegram connection
