@@ -30,7 +30,7 @@ class SimpleEngramTelegramBot:
     Simple Telegram bot with LMStudio integration for natural language trading conversations.
     """
 
-    def __init__(self, token: str, chat_id: str, lmstudio_url: str = "http://192.168.56.1:1234"):
+    def __init__(self, token: str, chat_id: str, lmstudio_url: str = "http://100.118.172.23:1234"):
         self.token = token
         self.chat_id = chat_id
         self.lmstudio_url = lmstudio_url

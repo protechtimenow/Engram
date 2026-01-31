@@ -1,0 +1,26 @@
+{
+  "test_date": "2026-01-31",
+  "lmstudio_endpoint": "http://100.118.172.23:1234",
+  "test_suites": [
+    {
+      "name": "LMStudio Endpoint Tests",
+      "total": 7,
+      "passed": 0,
+      "failed": 7,
+      "pass_rate": 0.0
+    },
+    {
+      "name": "Integration Tests",
+      "total": 7,
+      "passed": 7,
+      "failed": 0,
+      "pass_rate": 100.0
+    }
+  ],
+  "overall": {
+    "total": 14,
+    "passed": 7,
+    "failed": 7,
+    "pass_rate": 50.0
+  }
+}

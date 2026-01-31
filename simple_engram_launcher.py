@@ -40,7 +40,7 @@ class SimpleEngramBot:
         self.chat_id = None
         self.base_url = None
         self.engram_model = None
-        self.lmstudio_url = "http://192.168.56.1:1234"
+        self.lmstudio_url = "http://100.118.172.23:1234"
         self.running = False
         self.last_update_id = 0
         

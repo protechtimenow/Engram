@@ -243,7 +243,7 @@ class TestRunner:
             import requests
             
             # Test LMStudio API endpoint
-            lmstudio_url = "http://192.168.56.1:1234/v1/models"
+            lmstudio_url = "http://100.118.172.23:1234/v1/models"
             
             try:
                 response = requests.get(lmstudio_url, timeout=5)

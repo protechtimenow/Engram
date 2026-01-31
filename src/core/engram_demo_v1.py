@@ -492,7 +492,7 @@ class ClawdBotClient:
         return response_text
 
 class EngramModel(nn.Module):
-    def __init__(self, use_clawdbot=False, clawdbot_ws_url="ws://127.0.0.1:18789", use_lmstudio=False, lmstudio_url="http://192.168.56.1:1234"):
+    def __init__(self, use_clawdbot=False, clawdbot_ws_url="ws://127.0.0.1:18789", use_lmstudio=False, lmstudio_url="http://100.118.172.23:1234"):
         super().__init__()
         self.use_clawdbot = use_clawdbot
         self.use_lmstudio = use_lmstudio
@@ -615,7 +615,7 @@ class EngramModel(nn.Module):
 
 if __name__ == '__main__':
     # Use LMStudio mode with your local model
-    model = EngramModel(use_lmstudio=True, lmstudio_url="http://192.168.56.1:1234")
+    model = EngramModel(use_lmstudio=True, lmstudio_url="http://100.118.172.23:1234")
 
     text = "Only Alexander the Great could tame the horse Bucephalus."
     tokenizer = AutoTokenizer.from_pretrained(engram_cfg.tokenizer_name_or_path,trust_remote_code=True)

@@ -243,7 +243,7 @@ class EngramStrategy(IStrategy):
             use_clawdbot = self.config.get('engram', {}).get('use_clawdbot', False)
             use_lmstudio = self.config.get('engram', {}).get('use_lmstudio', False)
             clawdbot_ws_url = self.config.get('engram', {}).get('clawdbot_ws_url', "ws://127.0.0.1:18789")
-            lmstudio_url = self.config.get('engram', {}).get('lmstudio_url', "http://192.168.56.1:1234")
+            lmstudio_url = self.config.get('engram', {}).get('lmstudio_url', "http://100.118.172.23:1234")
 
             # Load Engram model
             self.engram_model = EngramModel(

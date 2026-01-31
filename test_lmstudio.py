@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 def test_lmstudio():
     """Test LMStudio API."""
-    url = "http://192.168.56.1:1234/v1/chat/completions"
+    url = "http://100.118.172.23:1234/v1/chat/completions"
 
     payload = {
         "model": "glm-4.7b-chat",

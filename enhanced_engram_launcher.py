@@ -36,7 +36,7 @@ class AIBackend:
     """AI Backend with fallback chain: LMStudio → Mock → Rule-based"""
     
     def __init__(self, lmstudio_url: str = None, timeout: int = 10):
-        self.lmstudio_url = lmstudio_url or os.getenv('LMSTUDIO_URL', 'http://192.168.56.1:1234')
+        self.lmstudio_url = lmstudio_url or os.getenv('LMSTUDIO_URL', 'http://100.118.172.23:1234')
         self.timeout = timeout
         self.lmstudio_available = False
         self.test_connection()
@@ -214,7 +214,7 @@ class EnhancedEngramBot:
         self.base_url = f"https://api.telegram.org/bot{self.token}"
         
         # Initialize AI backend with timeout protection
-        lmstudio_url = os.getenv('LMSTUDIO_URL', 'http://192.168.56.1:1234')
+        lmstudio_url = os.getenv('LMSTUDIO_URL', 'http://100.118.172.23:1234')
         lmstudio_timeout = int(os.getenv('LMSTUDIO_TIMEOUT', '10'))
         self.ai_backend = AIBackend(lmstudio_url, lmstudio_timeout)
         

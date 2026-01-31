@@ -203,7 +203,7 @@ class ComprehensiveTestSuite:
         """Test 6: LMStudio connectivity (optional)"""
         logger.info("🧪 Test 6: LMStudio Connectivity")
         try:
-            lmstudio_url = "http://192.168.56.1:1234"
+            lmstudio_url = "http://100.118.172.23:1234"
             response = requests.get(f"{lmstudio_url}/v1/models", timeout=5)
             
             if response.status_code == 200:

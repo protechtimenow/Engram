@@ -17,7 +17,7 @@ def test_lmstudio_integration():
     model = EngramModel(
         use_clawdbot=False,
         use_lmstudio=True,
-        lmstudio_url="http://192.168.56.1:1234"
+        lmstudio_url="http://100.118.172.23:1234"
     )
 
     # Test market analysis

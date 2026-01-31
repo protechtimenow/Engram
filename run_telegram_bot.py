@@ -19,7 +19,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class EngramBot:
-    def __init__(self, telegram_token: str, lmstudio_url: str = "http://192.168.56.1:1234/v1/chat/completions"):
+    def __init__(self, telegram_token: str, lmstudio_url: str = "http://100.118.172.23:1234/v1/chat/completions"):
         self.telegram_token = telegram_token
         self.lmstudio_url = lmstudio_url
         self.client = httpx.AsyncClient(timeout=30.0)
@@ -187,7 +187,7 @@ Send me a trading question to get started!
 def main():
     # Configuration
     TELEGRAM_TOKEN = "8517504737:AAELKyE2jC48Ql1d1opfEy8ZMfU5UifB6kA"
-    LMSTUDIO_URL = "http://192.168.56.1:1234/v1/chat/completions"
+    LMSTUDIO_URL = "http://100.118.172.23:1234/v1/chat/completions"
 
     # Create and run bot
     bot = EngramBot(TELEGRAM_TOKEN, LMSTUDIO_URL)
