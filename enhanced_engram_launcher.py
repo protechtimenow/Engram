@@ -44,9 +44,10 @@ class AIBackend:
     def test_connection(self):
         """Test LMStudio connection with short timeout"""
         try:
+            # Use tuple timeout: (connect_timeout, read_timeout)
             response = requests.get(
                 f"{self.lmstudio_url}/v1/models",
-                timeout=3
+                timeout=(5, 10)  # 5s connect, 10s read
             )
             self.lmstudio_available = response.status_code == 200
             if self.lmstudio_available:
@@ -69,6 +70,8 @@ class AIBackend:
             return None
             
         try:
+            # Use tuple timeout: (connect_timeout, read_timeout)
+            # Connect fast (5s), but allow long generation time (self.timeout)
             response = requests.post(
                 f"{self.lmstudio_url}/v1/chat/completions",
                 json={
@@ -77,19 +80,35 @@ class AIBackend:
                     "temperature": 0.7,
                     "max_tokens": 500
                 },
-                timeout=self.timeout
+                timeout=(5, self.timeout)  # 5s connect, self.timeout for read
             )
             
             if response.status_code == 200:
                 result = response.json()
-                return result['choices'][0]['message']['content']
+                
+                # Handle different response formats (especially glm-4.7-flash)
+                choice = (result.get("choices") or [{}])[0]
+                msg = choice.get("message") or {}
+                
+                # Try content first, then reasoning_content (for glm-4.7-flash)
+                text = (msg.get("content") or "").strip()
+                if not text:
+                    text = (msg.get("reasoning_content") or "").strip()
+                
+                if text:
+                    logger.info(f"✅ LMStudio response received ({len(text)} chars)")
+                    return text
+                else:
+                    logger.warning("⚠️ LMStudio returned empty response")
+                    return None
             else:
                 logger.warning(f"LMStudio returned status {response.status_code}")
                 return None
                 
         except requests.exceptions.Timeout:
-            logger.warning(f"LMStudio query timeout after {self.timeout}s - using fallback")
-            self.lmstudio_available = False  # Disable for future queries
+            logger.warning(f"⚠️ LMStudio query timeout after {self.timeout}s - using fallback for this request")
+            # DO NOT permanently disable - just fall back for this request
+            # self.lmstudio_available = False
             return None
         except Exception as e:
             logger.warning(f"LMStudio query error: {e}")
@@ -215,7 +234,7 @@ class EnhancedEngramBot:
         
         # Initialize AI backend with timeout protection
         lmstudio_url = os.getenv('LMSTUDIO_URL', 'http://100.118.172.23:1234')
-        lmstudio_timeout = int(os.getenv('LMSTUDIO_TIMEOUT', '10'))
+        lmstudio_timeout = int(os.getenv('LMSTUDIO_TIMEOUT', '180'))  # 3 minutes default (was 10s)
         self.ai_backend = AIBackend(lmstudio_url, lmstudio_timeout)
         
         # Load Engram model (optional)
@@ -330,8 +349,8 @@ class EnhancedEngramBot:
                     "Configuration:\n"
                     "• Set TELEGRAM_BOT_TOKEN env var for bot token\n"
                     "• Set TELEGRAM_CHAT_ID env var for chat ID\n"
-                    "• Set LMSTUDIO_URL env var for LMStudio URL\n"
-                    "• Set LMSTUDIO_TIMEOUT env var for timeout (default: 10s)"
+                    "• Set LMSTUDIO_URL env var for LMStudio URL (default: http://100.118.172.23:1234)\n"
+                    "• Set LMSTUDIO_TIMEOUT env var for timeout (default: 180s)"
                 )
             else:
                 # Use AI backend for general queries
