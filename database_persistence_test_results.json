@@ -1,0 +1,83 @@
+{
+  "test_suite": "Database and Persistence Tests",
+  "timestamp": "2026-01-31T04:39:26.059257",
+  "summary": {
+    "total_tests": 10,
+    "passed": 9,
+    "failed": 1,
+    "pass_rate": 90.0,
+    "duration_seconds": 0.22
+  },
+  "tests": [
+    {
+      "name": "JSON File Persistence",
+      "passed": true,
+      "duration_ms": 0.61,
+      "details": "Read/write/append operations successful (333 bytes)",
+      "timestamp": "2026-01-31T04:39:25.844656"
+    },
+    {
+      "name": "SQLite Database Operations",
+      "passed": true,
+      "duration_ms": 1.83,
+      "details": "CRUD operations successful (3 inserts, 1 update, 1 delete)",
+      "timestamp": "2026-01-31T04:39:25.846580"
+    },
+    {
+      "name": "Cache Implementation",
+      "passed": true,
+      "duration_ms": 200.36,
+      "details": "Set/get/delete/clear/TTL operations successful",
+      "timestamp": "2026-01-31T04:39:26.047063"
+    },
+    {
+      "name": "State Persistence",
+      "passed": true,
+      "duration_ms": 0.21,
+      "details": "State saved and loaded successfully (3 keys)",
+      "timestamp": "2026-01-31T04:39:26.047421"
+    },
+    {
+      "name": "Log File Rotation",
+      "passed": true,
+      "duration_ms": 1.56,
+      "details": "Log rotation successful (2 files created)",
+      "timestamp": "2026-01-31T04:39:26.049036"
+    },
+    {
+      "name": "Data Backup/Restore",
+      "passed": false,
+      "duration_ms": 0.8,
+      "details": "Restored data doesn't match original",
+      "timestamp": "2026-01-31T04:39:26.049935"
+    },
+    {
+      "name": "Concurrent File Access",
+      "passed": true,
+      "duration_ms": 7.43,
+      "details": "5 threads, 50 operations completed successfully",
+      "timestamp": "2026-01-31T04:39:26.057483"
+    },
+    {
+      "name": "Data Migration",
+      "passed": true,
+      "duration_ms": 0.01,
+      "details": "Migration from v1 to v2 successful",
+      "timestamp": "2026-01-31T04:39:26.057585"
+    },
+    {
+      "name": "Data Validation",
+      "passed": true,
+      "duration_ms": 0.03,
+      "details": "Validated 1 valid and 4 invalid trades",
+      "timestamp": "2026-01-31T04:39:26.057654"
+    },
+    {
+      "name": "Transaction Rollback",
+      "passed": true,
+      "duration_ms": 1.08,
+      "details": "Transaction rolled back successfully",
+      "timestamp": "2026-01-31T04:39:26.058780"
+    }
+  ]
+}
