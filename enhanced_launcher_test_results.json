@@ -1,0 +1,42 @@
+{
+  "timestamp": "2026-01-31 03:26:54",
+  "total_tests": 8,
+  "passed": 7,
+  "failed": 1,
+  "success_rate": 87.5,
+  "tests": [
+    {
+      "name": "Environment Variable Support",
+      "status": "PASS"
+    },
+    {
+      "name": "Configuration File Structure",
+      "status": "ERROR",
+      "error": ""
+    },
+    {
+      "name": "Timeout Configuration",
+      "status": "PASS"
+    },
+    {
+      "name": "Fallback Logic",
+      "status": "PASS"
+    },
+    {
+      "name": "Error Handling",
+      "status": "PASS"
+    },
+    {
+      "name": "Chat ID Validation",
+      "status": "PASS"
+    },
+    {
+      "name": "Command Processing",
+      "status": "PASS"
+    },
+    {
+      "name": "Enhanced Launcher Syntax",
+      "status": "PASS"
+    }
+  ]
+}
