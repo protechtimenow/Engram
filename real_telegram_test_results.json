@@ -1,0 +1,84 @@
+{
+  "test_suite": "Real Telegram Integration Test",
+  "chat_id": "1007321485",
+  "token_prefix": "8517504737:AAELKyE2j",
+  "timestamp": "2026-01-31T03:09:46.407942",
+  "total_tests": 12,
+  "passed": 12,
+  "failed": 0,
+  "pass_rate": "100.0%",
+  "results": [
+    {
+      "test": "Config has real chat_id",
+      "status": "PASS",
+      "error": null,
+      "timestamp": "2026-01-31T03:09:46.406901"
+    },
+    {
+      "test": "Config has real token",
+      "status": "PASS",
+      "error": null,
+      "timestamp": "2026-01-31T03:09:46.407007"
+    },
+    {
+      "test": "Telegram enabled",
+      "status": "PASS",
+      "error": null,
+      "timestamp": "2026-01-31T03:09:46.407091"
+    },
+    {
+      "test": "Notification settings configured",
+      "status": "PASS",
+      "error": null,
+      "timestamp": "2026-01-31T03:09:46.407179"
+    },
+    {
+      "test": "Chat ID format valid",
+      "status": "PASS",
+      "error": null,
+      "timestamp": "2026-01-31T03:09:46.407228"
+    },
+    {
+      "test": "Token format valid",
+      "status": "PASS",
+      "error": null,
+      "timestamp": "2026-01-31T03:09:46.407274"
+    },
+    {
+      "test": "Bot name configured",
+      "status": "PASS",
+      "error": null,
+      "timestamp": "2026-01-31T03:09:46.407352"
+    },
+    {
+      "test": "No mock values present",
+      "status": "PASS",
+      "error": null,
+      "timestamp": "2026-01-31T03:09:46.407426"
+    },
+    {
+      "test": "API connectivity configured",
+      "status": "PASS",
+      "error": null,
+      "timestamp": "2026-01-31T03:09:46.407509"
+    },
+    {
+      "test": "Trading mode configured",
+      "status": "PASS",
+      "error": null,
+      "timestamp": "2026-01-31T03:09:46.407589"
+    },
+    {
+      "test": "Dry run configured",
+      "status": "PASS",
+      "error": null,
+      "timestamp": "2026-01-31T03:09:46.407681"
+    },
+    {
+      "test": "Exchange configured",
+      "status": "PASS",
+      "error": null,
+      "timestamp": "2026-01-31T03:09:46.407765"
+    }
+  ]
+}
