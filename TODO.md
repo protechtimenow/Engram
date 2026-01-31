@@ -1,3 +1,19 @@
+# TODO - Engram Trading Bot
+
+## Recent Completed Tasks ✓
+
+### LMStudio Connection & Timeout Fixes
+- [✓] Analyze current timeout configuration and LMStudio connection issues
+- [✓] Fix permanent LMStudio disable after first timeout
+- [✓] Handle glm-4.7-flash empty content / reasoning_content response
+- [✓] Implement proper connect/read timeout tuple
+
+### In Progress
+- [ ] Test the fixed launcher with real LMStudio endpoint
+- [ ] Verify all changes work correctly
+
+---
+
 # Missing Configuration Resolution Plan
 
 ## Identified Missing Configurations

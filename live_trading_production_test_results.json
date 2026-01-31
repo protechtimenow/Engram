@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-01-31T13:21:32.953942",
-  "environment": "linux",
-  "python_version": "3.9.25 (main, Dec 10 2025, 00:00:00) \n[GCC 11.5.0 20240719 (Red Hat 11.5.0-5)]",
+  "timestamp": "2026-01-31T15:46:01.148308",
+  "environment": "win32",
+  "python_version": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
   "total_tests": 12,
   "passed": 12,
   "failed": 0,
