@@ -1,3 +1,5 @@
 [submodule "clawdbot_repo"]
 	path = clawdbot_repo
 	url = git@github.com:REAL_OWNER/REAL_REPO.git
+[submodule "freqtrade"]
+	url = https://github.com/freqtrade/freqtrade.git
