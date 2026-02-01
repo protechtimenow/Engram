@@ -586,7 +586,7 @@ class EngramModel(nn.Module):
         try:
             url = f"{self.lmstudio_url}/v1/chat/completions"
             data = {
-                "model": "deepseek/deepseek-r1-0528-qwen3-8b",
+                "model": "glm-4.7-flash",
                 "messages": [
                     {
                         "role": "system",
