@@ -168,21 +168,35 @@ class AIBackend:
             f"⚠️ Note: This is a rule-based fallback. For AI-powered analysis, ensure LMStudio is running."
         )
         
-    def query(self, prompt: str, use_engram: bool = False) -> Dict[str, str]:
+    def query(self, prompt: str, use_engram: bool = False, engram_model=None) -> Dict[str, str]:
         """Query with fallback chain: Engram+LMStudio → LMStudio → Mock → Rule-based
         
         Returns:
             Dict with 'reasoning', 'content', and 'mode' keys
         """
         # Try Engram + LMStudio first if Engram is available
-        if use_engram:
-            result = self.query_lmstudio(prompt)
-            if result:
-                return {
-                    "reasoning": result.get("reasoning", ""),
-                    "content": result.get("content", ""),
-                    "mode": "🧠 Engram + LMStudio"
-                }
+        if use_engram and engram_model is not None:
+            try:
+                # Use Engram's analyze_market method which integrates with LMStudio
+                logger.info("Using Engram neural analysis...")
+                
+                # Parse prompt to extract market context if available
+                market_data = {"query": prompt}
+                
+                # Call Engram's analysis
+                analysis = engram_model.analyze_market(
+                    market_data=market_data,
+                    prompt_template="{data}"
+                )
+                
+                if analysis and "reason" in analysis:
+                    return {
+                        "reasoning": f"Engram Neural Analysis:\nSignal: {analysis.get('signal', 'N/A')}\nConfidence: {analysis.get('confidence', 0.0):.2f}",
+                        "content": analysis["reason"],
+                        "mode": "🧠 Engram + LMStudio"
+                    }
+            except Exception as e:
+                logger.warning(f"Engram analysis failed: {e}, falling back to LMStudio")
         
         # Try LMStudio alone
         if self.lmstudio_available:
@@ -288,8 +302,12 @@ class EnhancedEngramBot:
                 except ImportError:
                     from engram_demo_v1 import EngramModel
             
-            self.engram_model = EngramModel()
-            logger.info("✅ Engram model loaded")
+            # Initialize Engram with LMStudio integration
+            self.engram_model = EngramModel(
+                use_lmstudio=True,
+                lmstudio_url=lmstudio_url
+            )
+            logger.info("✅ Engram model loaded with LMStudio integration")
         except Exception as e:
             logger.warning(f"⚠️ Engram model not available: {e}")
             self.engram_model = None
@@ -378,18 +396,43 @@ class EnhancedEngramBot:
                 symbol = parts[1] if len(parts) > 1 else "BTC/USDT"
                 
                 if self.ai_backend.lmstudio_available:
-                    prompt = f"Analyze the market for {symbol}. Provide a brief trading signal (BUY/SELL/HOLD) with reasoning."
-                    result = self.ai_backend.query(prompt, use_engram=bool(self.engram_model))
-                    
-                    if result.get("reasoning"):
-                        analysis = (
-                            f"💭 **Analysis Process:**\n"
-                            f"```\n{result['reasoning']}\n```\n\n"
-                            f"📊 **Market Analysis:**\n{result['content']}\n\n"
-                            f"🔧 Mode: {result['mode']}"
-                        )
+                    # Use Engram for market analysis if available
+                    if self.engram_model:
+                        try:
+                            market_data = {
+                                "symbol": symbol,
+                                "query": f"Analyze {symbol} and provide trading signal"
+                            }
+                            engram_analysis = self.engram_model.analyze_market(market_data)
+                            
+                            analysis = (
+                                f"💭 **Engram Neural Analysis:**\n"
+                                f"```\n"
+                                f"Signal: {engram_analysis.get('signal', 'N/A')}\n"
+                                f"Confidence: {engram_analysis.get('confidence', 0.0):.2f}\n"
+                                f"```\n\n"
+                                f"📊 **Market Analysis:**\n{engram_analysis.get('reason', 'No analysis available')}\n\n"
+                                f"🔧 Mode: 🧠 Engram + LMStudio"
+                            )
+                        except Exception as e:
+                            logger.warning(f"Engram analysis failed: {e}")
+                            # Fallback to regular LMStudio
+                            prompt = f"Analyze the market for {symbol}. Provide a brief trading signal (BUY/SELL/HOLD) with reasoning."
+                            result = self.ai_backend.query(prompt, use_engram=False)
+                            analysis = f"{result['content']}\n\n🔧 Mode: {result['mode']}"
                     else:
-                        analysis = f"{result['content']}\n\n🔧 Mode: {result['mode']}"
+                        prompt = f"Analyze the market for {symbol}. Provide a brief trading signal (BUY/SELL/HOLD) with reasoning."
+                        result = self.ai_backend.query(prompt, use_engram=False)
+                        
+                        if result.get("reasoning"):
+                            analysis = (
+                                f"💭 **Analysis Process:**\n"
+                                f"```\n{result['reasoning']}\n```\n\n"
+                                f"📊 **Market Analysis:**\n{result['content']}\n\n"
+                                f"🔧 Mode: {result['mode']}"
+                            )
+                        else:
+                            analysis = f"{result['content']}\n\n🔧 Mode: {result['mode']}"
                 else:
                     analysis = self.ai_backend.rule_based_analysis(symbol)
                     
@@ -412,7 +455,11 @@ class EnhancedEngramBot:
             else:
                 # Use AI backend for general queries
                 # Use Engram if available
-                result = self.ai_backend.query(text, use_engram=bool(self.engram_model))
+                result = self.ai_backend.query(
+                    text, 
+                    use_engram=bool(self.engram_model),
+                    engram_model=self.engram_model
+                )
                 
                 # Format response with reasoning if available
                 if result.get("reasoning"):
