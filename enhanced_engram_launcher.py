@@ -193,7 +193,7 @@ class AIBackend:
                     return {
                         "reasoning": f"Engram Neural Analysis:\nSignal: {analysis.get('signal', 'N/A')}\nConfidence: {analysis.get('confidence', 0.0):.2f}",
                         "content": analysis["reason"],
-                        "mode": "🧠 Engram + LMStudio"
+                        "mode": "🧠 Engram + ClawdBot"
                     }
             except Exception as e:
                 logger.warning(f"Engram analysis failed: {e}, falling back to LMStudio")
@@ -302,12 +302,13 @@ class EnhancedEngramBot:
                 except ImportError:
                     from engram_demo_v1 import EngramModel
             
-            # Initialize Engram with LMStudio integration
+            # Initialize Engram with ClawdBot integration
+            clawdbot_ws_url = os.getenv('CLAWDBOT_WS_URL', 'ws://127.0.0.1:18789')
             self.engram_model = EngramModel(
-                use_lmstudio=True,
-                lmstudio_url=lmstudio_url
+                use_clawdbot=True,
+                clawdbot_ws_url=clawdbot_ws_url
             )
-            logger.info("✅ Engram model loaded with LMStudio integration")
+            logger.info("✅ Engram model loaded with ClawdBot integration")
         except Exception as e:
             logger.warning(f"⚠️ Engram model not available: {e}")
             self.engram_model = None
@@ -412,7 +413,7 @@ class EnhancedEngramBot:
                                 f"Confidence: {engram_analysis.get('confidence', 0.0):.2f}\n"
                                 f"```\n\n"
                                 f"📊 **Market Analysis:**\n{engram_analysis.get('reason', 'No analysis available')}\n\n"
-                                f"🔧 Mode: 🧠 Engram + LMStudio"
+                                f"🔧 Mode: 🧠 Engram + ClawdBot"
                             )
                         except Exception as e:
                             logger.warning(f"Engram analysis failed: {e}")
