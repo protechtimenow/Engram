@@ -64,8 +64,12 @@ class AIBackend:
             logger.warning(f"⚠️ LMStudio error: {e} - using fallback AI")
             self.lmstudio_available = False
             
-    def query_lmstudio(self, prompt: str) -> Optional[str]:
-        """Query LMStudio with timeout protection"""
+    def query_lmstudio(self, prompt: str) -> Optional[Dict[str, str]]:
+        """Query LMStudio with timeout protection
+        
+        Returns:
+            Dict with 'reasoning' and 'content' keys, or None if failed
+        """
         if not self.lmstudio_available:
             return None
             
@@ -90,14 +94,21 @@ class AIBackend:
                 choice = (result.get("choices") or [{}])[0]
                 msg = choice.get("message") or {}
                 
-                # Try content first, then reasoning_content (for glm-4.7-flash)
-                text = (msg.get("content") or "").strip()
-                if not text:
-                    text = (msg.get("reasoning_content") or "").strip()
+                # Extract both reasoning and content
+                reasoning = (msg.get("reasoning_content") or "").strip()
+                content = (msg.get("content") or "").strip()
                 
-                if text:
-                    logger.info(f"✅ LMStudio response received ({len(text)} chars)")
-                    return text
+                # If no content but has reasoning, use reasoning as content
+                if not content and reasoning:
+                    content = reasoning
+                    reasoning = ""
+                
+                if content:
+                    logger.info(f"✅ LMStudio response received (content: {len(content)} chars, reasoning: {len(reasoning)} chars)")
+                    return {
+                        "reasoning": reasoning,
+                        "content": content
+                    }
                 else:
                     logger.warning("⚠️ LMStudio returned empty response")
                     return None
@@ -157,17 +168,40 @@ class AIBackend:
             f"⚠️ Note: This is a rule-based fallback. For AI-powered analysis, ensure LMStudio is running."
         )
         
-    def query(self, prompt: str) -> str:
-        """Query with fallback chain: LMStudio → Mock → Rule-based"""
-        # Try LMStudio first
+    def query(self, prompt: str, use_engram: bool = False) -> Dict[str, str]:
+        """Query with fallback chain: Engram+LMStudio → LMStudio → Mock → Rule-based
+        
+        Returns:
+            Dict with 'reasoning', 'content', and 'mode' keys
+        """
+        # Try Engram + LMStudio first if Engram is available
+        if use_engram:
+            result = self.query_lmstudio(prompt)
+            if result:
+                return {
+                    "reasoning": result.get("reasoning", ""),
+                    "content": result.get("content", ""),
+                    "mode": "🧠 Engram + LMStudio"
+                }
+        
+        # Try LMStudio alone
         if self.lmstudio_available:
             result = self.query_lmstudio(prompt)
             if result:
-                return result
+                return {
+                    "reasoning": result.get("reasoning", ""),
+                    "content": result.get("content", ""),
+                    "mode": "🤖 LMStudio"
+                }
                 
         # Fallback to mock AI
         logger.info("Using fallback AI (mock mode)")
-        return self.mock_ai_response(prompt)
+        mock_response = self.mock_ai_response(prompt)
+        return {
+            "reasoning": "",
+            "content": mock_response,
+            "mode": "⚠️ Fallback (Mock)"
+        }
 
 
 class EnhancedEngramBot:
@@ -345,7 +379,17 @@ class EnhancedEngramBot:
                 
                 if self.ai_backend.lmstudio_available:
                     prompt = f"Analyze the market for {symbol}. Provide a brief trading signal (BUY/SELL/HOLD) with reasoning."
-                    analysis = self.ai_backend.query(prompt)
+                    result = self.ai_backend.query(prompt, use_engram=bool(self.engram_model))
+                    
+                    if result.get("reasoning"):
+                        analysis = (
+                            f"💭 **Analysis Process:**\n"
+                            f"```\n{result['reasoning']}\n```\n\n"
+                            f"📊 **Market Analysis:**\n{result['content']}\n\n"
+                            f"🔧 Mode: {result['mode']}"
+                        )
+                    else:
+                        analysis = f"{result['content']}\n\n🔧 Mode: {result['mode']}"
                 else:
                     analysis = self.ai_backend.rule_based_analysis(symbol)
                     
@@ -367,7 +411,19 @@ class EnhancedEngramBot:
                 )
             else:
                 # Use AI backend for general queries
-                response = self.ai_backend.query(text)
+                # Use Engram if available
+                result = self.ai_backend.query(text, use_engram=bool(self.engram_model))
+                
+                # Format response with reasoning if available
+                if result.get("reasoning"):
+                    response = (
+                        f"💭 **Thinking Process:**\n"
+                        f"```\n{result['reasoning']}\n```\n\n"
+                        f"📝 **Response:**\n{result['content']}\n\n"
+                        f"🔧 Mode: {result['mode']}"
+                    )
+                else:
+                    response = f"{result['content']}\n\n🔧 Mode: {result['mode']}"
                 
             # Send response
             self.send_message(response)
