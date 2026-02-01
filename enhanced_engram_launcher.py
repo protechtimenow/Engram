@@ -240,7 +240,20 @@ class EnhancedEngramBot:
         # Load Engram model (optional)
         logger.info("Loading Engram neural model...")
         try:
-            from engram_demo_v1 import EngramModel
+            # Add src directory to path for proper module resolution
+            src_path = Path(__file__).parent / 'src'
+            if src_path.exists() and str(src_path) not in sys.path:
+                sys.path.insert(0, str(src_path))
+            
+            # Try multiple import strategies for robustness
+            try:
+                from core.engram_demo_v1 import EngramModel
+            except ImportError:
+                try:
+                    from src.core.engram_demo_v1 import EngramModel
+                except ImportError:
+                    from engram_demo_v1 import EngramModel
+            
             self.engram_model = EngramModel()
             logger.info("✅ Engram model loaded")
         except Exception as e:
