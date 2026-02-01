@@ -617,14 +617,21 @@ class EngramModel(nn.Module):
             content = message.get('content', '').strip()
             reasoning = message.get('reasoning_content', '').strip()
             
+            # DEBUG: Log what we received
+            logger.info(f"[DEBUG] LMStudio Response - content length: {len(content)}, reasoning length: {len(reasoning)}")
+            if not content:
+                logger.warning(f"[DEBUG] EMPTY CONTENT DETECTED! Reasoning preview: {reasoning[:100]}...")
+            
             # GLM-4.7-flash fix: If content is empty but reasoning exists, extract answer
             if not content and reasoning:
+                logger.info("[DEBUG] APPLYING GLM-4.7-FLASH FIX - Extracting from reasoning_content")
                 # Strategy 1: Look for the last paragraph (usually the answer)
                 if '\n\n' in reasoning:
                     paragraphs = [p.strip() for p in reasoning.split('\n\n') if p.strip()]
                     if paragraphs:
                         # Take the last paragraph as it's usually the final answer
                         content = paragraphs[-1]
+                        logger.info(f"[DEBUG] Strategy 1 applied - extracted {len(content)} chars from last paragraph")
                 
                 # Strategy 2: If still no content or content looks like reasoning, extract differently
                 if not content or any(marker in content.lower() for marker in ['first,', 'let me', 'i need to', 'i should', 'thinking', 'the user']):
@@ -642,6 +649,7 @@ class EngramModel(nn.Module):
                         # Ensure it ends with proper punctuation
                         if content and not content.endswith(('.', '!', '?')):
                             content += '.'
+                        logger.info(f"[DEBUG] Strategy 2 applied - filtered {len(clean_sentences)} clean sentences")
                 
                 # Strategy 3: If still no good content, use full reasoning but clean it
                 if not content:
@@ -661,15 +669,20 @@ class EngramModel(nn.Module):
                             parts = content.split('. ', 1)
                             if len(parts) > 1:
                                 content = parts[1].strip()
+                                logger.info(f"[DEBUG] Strategy 3 applied - removed reasoning prefix")
                             break
             
             # Final cleanup: Ensure we have something
             if not content:
+                logger.warning("[DEBUG] Still no content after all strategies - using fallback")
                 content = "I'm here to help! How can I assist you?"
+            else:
+                logger.info(f"[DEBUG] Final content length: {len(content)} chars")
             
             # Limit length to prevent truncation
             MAX_LENGTH = 800  # Reasonable length for most responses
             if len(content) > MAX_LENGTH:
+                logger.info(f"[DEBUG] Content too long ({len(content)} chars), truncating to {MAX_LENGTH}")
                 # Try to cut at sentence boundary
                 truncated = content[:MAX_LENGTH]
                 last_period = truncated.rfind('.')
@@ -678,6 +691,7 @@ class EngramModel(nn.Module):
                 else:
                     content = truncated + "..."
             
+            logger.info(f"[DEBUG] Returning content: {content[:100]}...")
             return content
             
         except Exception as e:
