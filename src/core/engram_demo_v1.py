@@ -617,43 +617,68 @@ class EngramModel(nn.Module):
             content = message.get('content', '').strip()
             reasoning = message.get('reasoning_content', '').strip()
             
-            # If content is empty but reasoning exists, extract clean answer from reasoning
+            # GLM-4.7-flash fix: If content is empty but reasoning exists, extract answer
             if not content and reasoning:
-                # Try to extract the final answer after reasoning markers
+                # Strategy 1: Look for the last paragraph (usually the answer)
                 if '\n\n' in reasoning:
-                    # Split by double newlines and take the last substantial part
-                    parts = [p.strip() for p in reasoning.split('\n\n') if p.strip()]
-                    # Look for the actual answer (usually after reasoning)
-                    for part in reversed(parts):
-                        # Skip parts that look like internal reasoning
-                        if not any(marker in part.lower() for marker in ['first,', 'let me', 'i need to', 'i should', 'thinking']):
-                            content = part
-                            break
+                    paragraphs = [p.strip() for p in reasoning.split('\n\n') if p.strip()]
+                    if paragraphs:
+                        # Take the last paragraph as it's usually the final answer
+                        content = paragraphs[-1]
                 
-                # If still no content, use the reasoning but clean it up
+                # Strategy 2: If still no content or content looks like reasoning, extract differently
+                if not content or any(marker in content.lower() for marker in ['first,', 'let me', 'i need to', 'i should', 'thinking', 'the user']):
+                    # Look for sentences that don't start with reasoning markers
+                    sentences = reasoning.split('. ')
+                    clean_sentences = []
+                    for sentence in sentences:
+                        sentence = sentence.strip()
+                        # Skip reasoning sentences
+                        if not any(marker in sentence.lower()[:50] for marker in ['first,', 'let me', 'i need to', 'i should', 'thinking', 'the user is', 'i will']):
+                            clean_sentences.append(sentence)
+                    
+                    if clean_sentences:
+                        content = '. '.join(clean_sentences).strip()
+                        # Ensure it ends with proper punctuation
+                        if content and not content.endswith(('.', '!', '?')):
+                            content += '.'
+                
+                # Strategy 3: If still no good content, use full reasoning but clean it
                 if not content:
                     content = reasoning
+                    # Remove common reasoning prefixes
+                    reasoning_markers = [
+                        'First, the user wants me to',
+                        'First, I need to',
+                        'Let me think about',
+                        'I should',
+                        'The user is asking',
+                        'The user wants',
+                    ]
+                    for marker in reasoning_markers:
+                        if content.lower().startswith(marker.lower()):
+                            # Find the actual response after the reasoning
+                            parts = content.split('. ', 1)
+                            if len(parts) > 1:
+                                content = parts[1].strip()
+                            break
             
-            # Clean up any remaining reasoning markers
-            if content:
-                # Remove common reasoning prefixes
-                reasoning_markers = [
-                    'First, the user wants me to',
-                    'First, I need to',
-                    'Let me think about',
-                    'I should',
-                    'The user is asking',
-                ]
-                for marker in reasoning_markers:
-                    if content.startswith(marker):
-                        # Find the actual response after the reasoning
-                        sentences = content.split('. ')
-                        if len(sentences) > 1:
-                            # Skip the first reasoning sentence
-                            content = '. '.join(sentences[1:]).strip()
-                        break
+            # Final cleanup: Ensure we have something
+            if not content:
+                content = "I'm here to help! How can I assist you?"
             
-            return content if content else "I'm here to help! How can I assist you?"
+            # Limit length to prevent truncation
+            MAX_LENGTH = 800  # Reasonable length for most responses
+            if len(content) > MAX_LENGTH:
+                # Try to cut at sentence boundary
+                truncated = content[:MAX_LENGTH]
+                last_period = truncated.rfind('.')
+                if last_period > MAX_LENGTH * 0.7:  # If we can cut at a sentence
+                    content = truncated[:last_period + 1]
+                else:
+                    content = truncated + "..."
+            
+            return content
             
         except Exception as e:
             return f"LMStudio query failed: {str(e)}"
