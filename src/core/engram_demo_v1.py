@@ -402,8 +402,9 @@ class TransformerBlock(nn.Module):
         return hidden_states
 
 class ClawdBotClient:
-    def __init__(self, ws_url="ws://127.0.0.1:18789"):
+    def __init__(self, ws_url="ws://127.0.0.1:18789", auth_token=None):
         self.ws_url = ws_url
+        self.auth_token = auth_token or "2a965e2334ac2b0a9d4d255f86e479db5a3b75a992affbdc"
         self.connected = False
         self.session_id = None
         self.loop = None
@@ -422,7 +423,9 @@ class ClawdBotClient:
 
     async def _connect(self):
         try:
-            async with websockets.connect(self.ws_url) as websocket:
+            # Add auth token to WebSocket URL
+            ws_url_with_auth = f"{self.ws_url}?token={self.auth_token}"
+            async with websockets.connect(ws_url_with_auth) as websocket:
                 self.websocket = websocket
                 self.connected = True
                 print("Connected to ClawdBot Gateway")
@@ -492,14 +495,14 @@ class ClawdBotClient:
         return response_text
 
 class EngramModel(nn.Module):
-    def __init__(self, use_clawdbot=False, clawdbot_ws_url="ws://127.0.0.1:18789", use_lmstudio=False, lmstudio_url="http://100.118.172.23:1234"):
+    def __init__(self, use_clawdbot=False, clawdbot_ws_url="ws://127.0.0.1:18789", use_lmstudio=False, lmstudio_url="http://100.118.172.23:1234", clawdbot_auth_token=None):
         super().__init__()
         self.use_clawdbot = use_clawdbot
         self.use_lmstudio = use_lmstudio
         self.lmstudio_url = lmstudio_url
 
         if self.use_clawdbot:
-            self.clawdbot = ClawdBotClient(clawdbot_ws_url)
+            self.clawdbot = ClawdBotClient(clawdbot_ws_url, auth_token=clawdbot_auth_token)
             self.clawdbot.start()
         elif self.use_lmstudio:
             # LMStudio mode - no local model needed
@@ -532,12 +535,21 @@ class EngramModel(nn.Module):
 
     def analyze_market(self, market_data, prompt_template="Analyze this market data and provide trading signals: {data}"):
         """Use external model (ClawdBot or LMStudio) for market analysis."""
+        response = None
+        
         if self.use_clawdbot:
             if not self.clawdbot.connected:
-                return {"signal": "HOLD", "confidence": 0.5, "reason": "ClawdBot not available"}
-
-            prompt = prompt_template.format(data=str(market_data))
-            response = self.clawdbot.send_message(prompt)
+                # Fall back to LMStudio if ClawdBot not connected
+                print("ClawdBot not connected, falling back to LMStudio")
+                response = self._query_lmstudio(prompt_template.format(data=str(market_data)))
+            else:
+                prompt = prompt_template.format(data=str(market_data))
+                response = self.clawdbot.send_message(prompt)
+                
+                # Check if response is an error message
+                if response and (response.startswith("Error:") or response.startswith("ClawdBot") or response.startswith("No websocket")):
+                    print(f"ClawdBot error: {response}, falling back to LMStudio")
+                    response = self._query_lmstudio(prompt)
 
         elif self.use_lmstudio:
             prompt = prompt_template.format(data=str(market_data))
@@ -545,6 +557,14 @@ class EngramModel(nn.Module):
 
         else:
             return {"signal": "HOLD", "confidence": 0.5, "reason": "No external model configured"}
+
+        # Check if response is still an error or empty
+        if not response or response.startswith("Error:") or response.startswith("LMStudio query failed"):
+            return {
+                "signal": "HOLD",
+                "confidence": 0.5,
+                "reason": "Unable to analyze market data at this time. Please try again later."
+            }
 
         # Parse response for signal
         response_lower = response.lower()
@@ -558,7 +578,7 @@ class EngramModel(nn.Module):
         return {
             "signal": signal,
             "confidence": 0.8,  # Default high confidence
-            "reason": response[:200]  # Truncate reason
+            "reason": response
         }
 
     def _query_lmstudio(self, prompt):
@@ -570,7 +590,7 @@ class EngramModel(nn.Module):
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are a trading analysis AI. Analyze market data and provide clear trading signals."
+                        "content": "You are a helpful trading analysis AI. Provide clear, concise responses without showing your thinking process. Give direct answers only."
                     },
                     {
                         "role": "user",
@@ -582,7 +602,6 @@ class EngramModel(nn.Module):
                 "stream": False
             }
 
-
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": "Bearer dummy"
@@ -593,11 +612,49 @@ class EngramModel(nn.Module):
 
             result = response.json()
             message = result['choices'][0]['message']
-            # Handle different response formats
-            content = message.get('content', '')
-            if not content and 'reasoning_content' in message:
-                content = message['reasoning_content']
-            return content
+            
+            # Get content, preferring 'content' over 'reasoning_content'
+            content = message.get('content', '').strip()
+            reasoning = message.get('reasoning_content', '').strip()
+            
+            # If content is empty but reasoning exists, extract clean answer from reasoning
+            if not content and reasoning:
+                # Try to extract the final answer after reasoning markers
+                if '\n\n' in reasoning:
+                    # Split by double newlines and take the last substantial part
+                    parts = [p.strip() for p in reasoning.split('\n\n') if p.strip()]
+                    # Look for the actual answer (usually after reasoning)
+                    for part in reversed(parts):
+                        # Skip parts that look like internal reasoning
+                        if not any(marker in part.lower() for marker in ['first,', 'let me', 'i need to', 'i should', 'thinking']):
+                            content = part
+                            break
+                
+                # If still no content, use the reasoning but clean it up
+                if not content:
+                    content = reasoning
+            
+            # Clean up any remaining reasoning markers
+            if content:
+                # Remove common reasoning prefixes
+                reasoning_markers = [
+                    'First, the user wants me to',
+                    'First, I need to',
+                    'Let me think about',
+                    'I should',
+                    'The user is asking',
+                ]
+                for marker in reasoning_markers:
+                    if content.startswith(marker):
+                        # Find the actual response after the reasoning
+                        sentences = content.split('. ')
+                        if len(sentences) > 1:
+                            # Skip the first reasoning sentence
+                            content = '. '.join(sentences[1:]).strip()
+                        break
+            
+            return content if content else "I'm here to help! How can I assist you?"
+            
         except Exception as e:
             return f"LMStudio query failed: {str(e)}"
 
