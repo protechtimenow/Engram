@@ -24,6 +24,7 @@ wheels/
 venv/
 ENV/
 env/
+.venv/
 
 # IDE
 .vscode/
@@ -35,18 +36,71 @@ env/
 # Logs
 *.log
 logs/
+log/
 
-# Test results
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.nyc_output/
 test_results.json
 test_report.txt
 interactive_test_results.json
+simple_test_results.json
+real_telegram_test_results.json
+integration_test_results.json
+thorough_test_results.json
+edge_case_test_results.json
+config_validation_advanced_test_results.json
+database_persistence_test_results.json
+error_recovery_resilience_test_results.json
+enhanced_launcher_test_results.json
+live_trading_production_test_results.json
+live_trading_simulation_test_results.json
+lmstudio_endpoint_test_results.json
+performance_benchmark_load_test_results.json
+security_authentication_test_results.json
+soak_endurance_test_results.json
+websocket_realtime_test_results.json
+
+# Temporary files
+*.tmp
+*.bak
+*.old
+*.backup
+tmp/
+temp/
 
 # OS
 .DS_Store
 Thumbs.db
+.Spotlight-V100
+.Trashes
 
 # Secrets
 .env
+.env.local
+.env.*.local
 *.key
 *.pem
 config/**/secrets.json
+
+# Node
+node_modules/
+.next/
+.nuxt/
+
+# Project specific
+*.zip
+*.tar.gz
+dist/
+build/
+
+# Debug files
+*debug*.py
+*patch*.py
+*_test_final.py
+
+# Large files
+*.pdf
+Engram_paper.pdf

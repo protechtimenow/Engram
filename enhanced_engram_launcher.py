@@ -36,12 +36,14 @@ logger = logging.getLogger(__name__)
 
 
 class AIBackend:
-    """AI Backend with fallback chain: LMStudio → Mock → Rule-based"""
+    """AI Backend with fallback chain: OpenClaw/ClawdBot → LMStudio → Mock → Rule-based"""
     
-    def __init__(self, lmstudio_url: str = None, timeout: int = 10):
+    def __init__(self, lmstudio_url: str = None, timeout: int = 10, clawdbot_client=None):
         self.lmstudio_url = lmstudio_url or os.getenv('LMSTUDIO_URL', 'http://100.118.172.23:1234')
         self.timeout = timeout
         self.lmstudio_available = False
+        self.clawdbot_client = clawdbot_client
+        self.use_clawdbot = clawdbot_client is not None
         self.test_connection()
         
     def test_connection(self):
@@ -171,16 +173,43 @@ class AIBackend:
             f"⚠️ Note: This is a rule-based fallback. For AI-powered analysis, ensure LMStudio is running."
         )
         
+    def query_clawdbot(self, prompt: str) -> Optional[Dict[str, str]]:
+        """Query through ClawdBot/OpenClaw gateway
+        
+        Returns:
+            Dict with 'reasoning' and 'content' keys, or None if failed
+        """
+        if not self.use_clawdbot or not self.clawdbot_client:
+            return None
+            
+        try:
+            logger.info("Querying through OpenClaw/ClawdBot gateway...")
+            response = self.clawdbot_client.send_message(prompt, timeout=self.timeout)
+            
+            if response and not response.startswith("Error:") and not response.startswith("ClawdBot"):
+                logger.info(f"[OK] OpenClaw response received ({len(response)} chars)")
+                return {
+                    "reasoning": "",
+                    "content": response
+                }
+            else:
+                logger.warning(f"[WARN] OpenClaw error: {response}")
+                return None
+                
+        except Exception as e:
+            logger.warning(f"OpenClaw query error: {e}")
+            return None
+    
     def query(self, prompt: str, use_engram: bool = False, engram_model=None) -> Dict[str, str]:
-        """Query with fallback chain: Engram+LMStudio → LMStudio → Mock → Rule-based
+        """Query with fallback chain: Engram+OpenClaw → OpenClaw → LMStudio → Mock
         
         Returns:
             Dict with 'reasoning', 'content', and 'mode' keys
         """
-        # Try Engram + LMStudio first if Engram is available
+        # Try Engram + OpenClaw first if Engram is available
         if use_engram and engram_model is not None:
             try:
-                # Use Engram's analyze_market method which integrates with LMStudio
+                # Use Engram's analyze_market method which integrates with OpenClaw
                 logger.info("Using Engram neural analysis...")
                 
                 # Parse prompt to extract market context if available
@@ -196,22 +225,33 @@ class AIBackend:
                     return {
                         "reasoning": f"Engram Neural Analysis:\nSignal: {analysis.get('signal', 'N/A')}\nConfidence: {analysis.get('confidence', 0.0):.2f}",
                         "content": analysis["reason"],
-                        "mode": "🧠 Engram + ClawdBot"
+                        "mode": "🧠 Engram + OpenClaw"
                     }
             except Exception as e:
-                logger.warning(f"Engram analysis failed: {e}, falling back to LMStudio")
+                logger.warning(f"Engram analysis failed: {e}, falling back to OpenClaw")
         
-        # Try LMStudio alone
+        # Try OpenClaw/ClawdBot gateway (primary for general queries)
+        if self.use_clawdbot:
+            result = self.query_clawdbot(prompt)
+            if result:
+                return {
+                    "reasoning": result.get("reasoning", ""),
+                    "content": result.get("content", ""),
+                    "mode": "🌐 OpenClaw"
+                }
+        
+        # Fallback to direct LMStudio
         if self.lmstudio_available:
+            logger.info("OpenClaw unavailable, falling back to direct LMStudio...")
             result = self.query_lmstudio(prompt)
             if result:
                 return {
                     "reasoning": result.get("reasoning", ""),
                     "content": result.get("content", ""),
-                    "mode": "🤖 LMStudio"
+                    "mode": "🤖 LMStudio (Direct)"
                 }
                 
-        # Fallback to mock AI
+        # Final fallback to mock AI
         logger.info("Using fallback AI (mock mode)")
         mock_response = self.mock_ai_response(prompt)
         return {
@@ -285,13 +325,9 @@ class EnhancedEngramBot:
             
         self.base_url = f"https://api.telegram.org/bot{self.token}"
         
-        # Initialize AI backend with timeout protection
-        lmstudio_url = os.getenv('LMSTUDIO_URL', 'http://100.118.172.23:1234')
-        lmstudio_timeout = int(os.getenv('LMSTUDIO_TIMEOUT', '180'))  # 3 minutes default (was 10s)
-        self.ai_backend = AIBackend(lmstudio_url, lmstudio_timeout)
-        
-        # Load Engram model (optional)
-        logger.info("Loading Engram neural model...")
+        # Load Engram model and ClawdBot client first
+        logger.info("Loading Engram neural model and OpenClaw/ClawdBot client...")
+        clawdbot_client = None
         try:
             # Add src directory to path for proper module resolution
             src_path = Path(__file__).parent / 'src'
@@ -300,25 +336,34 @@ class EnhancedEngramBot:
             
             # Try multiple import strategies for robustness
             try:
-                from core.engram_demo_v1 import EngramModel
+                from core.engram_demo_v1 import EngramModel, ClawdBotClient
             except ImportError:
                 try:
-                    from src.core.engram_demo_v1 import EngramModel
+                    from src.core.engram_demo_v1 import EngramModel, ClawdBotClient
                 except ImportError:
-                    from engram_demo_v1 import EngramModel
+                    from engram_demo_v1 import EngramModel, ClawdBotClient
             
-            # Initialize Engram with ClawdBot integration
+            # Initialize ClawdBot/OpenClaw client
             clawdbot_ws_url = os.getenv('CLAWDBOT_WS_URL', 'ws://127.0.0.1:18789')
             clawdbot_auth_token = os.getenv('CLAWDBOT_AUTH_TOKEN', '2a965e2334ac2b0a9d4d255f86e479db5a3b75a992affbdc')
+            clawdbot_client = ClawdBotClient(clawdbot_ws_url, auth_token=clawdbot_auth_token)
+            clawdbot_client.start()
+            
+            # Initialize Engram with ClawdBot integration
             self.engram_model = EngramModel(
                 use_clawdbot=True,
                 clawdbot_ws_url=clawdbot_ws_url,
                 clawdbot_auth_token=clawdbot_auth_token
             )
-            logger.info("[OK] Engram model loaded with ClawdBot integration")
+            logger.info("[OK] Engram model loaded with OpenClaw/ClawdBot integration")
         except Exception as e:
             logger.warning(f"⚠️ Engram model not available: {e}")
             self.engram_model = None
+        
+        # Initialize AI backend with timeout protection and ClawdBot client
+        lmstudio_url = os.getenv('LMSTUDIO_URL', 'http://100.118.172.23:1234')
+        lmstudio_timeout = int(os.getenv('LMSTUDIO_TIMEOUT', '180'))  # 3 minutes default
+        self.ai_backend = AIBackend(lmstudio_url, lmstudio_timeout, clawdbot_client=clawdbot_client)
             
         # Test Telegram connection
         logger.info("Testing Telegram connection...")
@@ -409,17 +454,27 @@ class EnhancedEngramBot:
                     "💡 Tip: Just send me a message and I'll respond using AI!"
                 )
             elif text.startswith('/status'):
-                lmstudio_status = "✅ Connected" if self.ai_backend.lmstudio_available else "⚠️ Offline (using fallback)"
+                openclaw_status = "✅ Connected" if self.ai_backend.use_clawdbot and self.ai_backend.clawdbot_client and self.ai_backend.clawdbot_client.connected else "⚠️ Offline"
+                lmstudio_status = "✅ Connected" if self.ai_backend.lmstudio_available else "⚠️ Offline"
                 engram_status = "✅ Loaded" if self.engram_model else "⚠️ Not Available"
+                
+                # Determine actual AI mode based on what's actually connected
+                if self.ai_backend.use_clawdbot and self.ai_backend.clawdbot_client and self.ai_backend.clawdbot_client.connected:
+                    ai_mode = "🌐 OpenClaw"
+                elif self.ai_backend.lmstudio_available:
+                    ai_mode = "🤖 LMStudio"
+                else:
+                    ai_mode = "⚠️ Fallback (Mock)"
                 
                 response = (
                     f"🤖 Bot Status:\n\n"
                     f"• Status: Running\n"
                     f"• Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
                     f"• Engram Model: {engram_status}\n"
-                    f"• LMStudio: {lmstudio_status}\n"
+                    f"• OpenClaw Gateway: {openclaw_status}\n"
+                    f"• LMStudio (Fallback): {lmstudio_status}\n"
                     f"• Telegram: ✅ Connected\n"
-                    f"• AI Mode: {'LMStudio' if self.ai_backend.lmstudio_available else 'Fallback (Mock)'}"
+                    f"• AI Mode: {ai_mode}"
                 )
             elif text.startswith('/analyze'):
                 parts = text.split()
@@ -492,11 +547,11 @@ class EnhancedEngramBot:
                 )
             else:
                 # Use AI backend for general queries
-                # Use Engram if available
+                # For general queries, use LMStudio directly (not Engram market analysis)
                 result = self.ai_backend.query(
                     text, 
-                    use_engram=bool(self.engram_model),
-                    engram_model=self.engram_model
+                    use_engram=False,  # Don't use Engram for general chat
+                    engram_model=None
                 )
                 
                 # Production mode: ALWAYS clean, natural responses only
@@ -536,11 +591,13 @@ class EnhancedEngramBot:
         logger.info("📱 Send a message to your Telegram bot to test it!")
         
         # Send startup notification
+        openclaw_status = "✅ Connected" if self.ai_backend.use_clawdbot and self.ai_backend.clawdbot_client and self.ai_backend.clawdbot_client.connected else "⚠️ Offline"
         startup_msg = (
             "🤖 Enhanced Engram Bot is now online!\n\n"
-            f"• LMStudio: {'✅ Connected' if self.ai_backend.lmstudio_available else '⚠️ Offline (using fallback)'}\n"
+            f"• OpenClaw Gateway: {openclaw_status}\n"
+            f"• LMStudio (Fallback): {'✅ Connected' if self.ai_backend.lmstudio_available else '⚠️ Offline'}\n"
             f"• Engram Model: {'✅ Loaded' if self.engram_model else '⚠️ Not Available'}\n"
-            f"• AI Mode: {'LMStudio' if self.ai_backend.lmstudio_available else 'Fallback (Mock)'}\n\n"
+            f"• AI Mode: {'🌐 OpenClaw' if self.ai_backend.use_clawdbot else '🤖 LMStudio' if self.ai_backend.lmstudio_available else '⚠️ Fallback (Mock)'}\n\n"
             "Send /help for available commands!"
         )
         self.send_message(startup_msg)

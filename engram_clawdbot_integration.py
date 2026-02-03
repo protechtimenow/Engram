@@ -52,7 +52,7 @@ def load_config() -> dict:
         # ClawdBot gateway settings
         "clawdbot_host": os.getenv("CLAWDBOT_HOST", file_config.get("clawdbot", {}).get("host", "localhost")),
         "clawdbot_port": int(os.getenv("CLAWDBOT_PORT", file_config.get("clawdbot", {}).get("port", 18789))),
-        "clawdbot_token": os.getenv("CLAWDBOT_TOKEN", file_config.get("clawdbot", {}).get("token", "")),
+        "clawdbot_token": os.getenv("CLAWDBOT_TOKEN", file_config.get("clawdbot", {}).get("token", "2a965e2334ac2b0a9d4d255f86e479db5a3b75a992affbdc")),
         
         # Agent settings
         "response_format": os.getenv("ENGRAM_RESPONSE_FORMAT", file_config.get("agent", {}).get("response_format", "clean"))

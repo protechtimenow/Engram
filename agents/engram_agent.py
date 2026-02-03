@@ -11,6 +11,7 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime
 import os
 import sys
+import uuid
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -61,68 +62,109 @@ class EngramAgent:
         Connect to ClawdBot gateway via WebSocket
         
         This fixes the 1008 policy violation error by:
-        1. Using correct clawdbot-v1 subprotocol
-        2. Proper JSON message framing
-        3. Correct authentication headers
+        1. Using correct token in query string
+        2. Proper authentication challenge-response handshake
+        3. Correct message types (chat, auth, etc.)
         """
-        uri = f"ws://{self.gateway_host}:{self.gateway_port}/ws"
-        
-        headers = {
-            "User-Agent": "Engram-Agent/1.0",
-            "X-Agent-ID": "engram",
-            "X-Agent-Version": "1.0.0"
-        }
-        
-        # Use token from ClawdBot config if not provided
+        # Use token from ClawdBot config
         token = self.gateway_token or "2a965e2334ac2b0a9d4d255f86e479db5a3b75a992affbdc"
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
+        uri = f"ws://{self.gateway_host}:{self.gateway_port}?token={token}"
         
         try:
-            # DEBUG: Log headers being sent
-            logger.info(f"Attempting connection to {uri}")
-            logger.info(f"Headers: {headers}")
-            logger.info(f"Subprotocols: ['clawdbot-v1']")
+            logger.info(f"Attempting connection to {uri[:50]}...")
             
-            # Use clawdbot-v1 subprotocol to fix 1008 error
-            self.websocket = await websockets.connect(
-                uri,
-                subprotocols=["clawdbot-v1"],
-                additional_headers=headers,
-                ping_interval=30,
-                ping_timeout=10
-            )
+            # Connect without subprotocols - ClawdBot doesn't use them
+            self.websocket = await websockets.connect(uri)
             
-            logger.info(f"[OK] Connected to ClawdBot gateway: {uri}")
-            logger.info(f"[OK] Connection User-Agent: {headers.get('User-Agent')}")
+            logger.info(f"[OK] Connected to ClawdBot gateway")
             
-            # Don't send hello immediately - wait for ClawdBot to send first message
-            # ClawdBot will send an event message first
-            
-            # Reset reconnect delay on successful connection
-            self.reconnect_delay = 1
-            
-            return True
+            # Handle authentication challenge-response
+            if await self._authenticate():
+                # Reset reconnect delay on successful connection
+                self.reconnect_delay = 1
+                return True
+            else:
+                logger.error("[ERROR] Authentication failed")
+                await self.websocket.close()
+                return False
             
         except Exception as e:
-            logger.error(f"Failed to connect to gateway: {e}")
+            logger.error(f"[ERROR] Failed to connect to gateway: {e}")
+            return False
+    
+    async def _authenticate(self) -> bool:
+        """
+        Handle ClawdBot authentication challenge-response
+        Uses proper ClawdBot protocol: send 'connect' request after challenge
+        
+        Returns:
+            True if authentication successful, False otherwise
+        """
+        try:
+            # Wait for initial challenge message
+            logger.info("Waiting for authentication challenge...")
+            message = await asyncio.wait_for(self.websocket.recv(), timeout=5.0)
+            data = json.loads(message)
+            
+            logger.debug(f"Received: {data}")
+            
+            # Check if it's a connection challenge
+            if data.get("type") == "event" and data.get("event") == "connect.challenge":
+                nonce = data.get("payload", {}).get("nonce")
+                token = self.gateway_token or "2a965e2334ac2b0a9d4d255f86e479db5a3b75a992affbdc"
+                
+                # Send connect request with proper ClawdBot protocol
+                connect_msg = {
+                    "type": "req",
+                    "id": str(uuid.uuid4()),
+                    "method": "connect",
+                    "params": {
+                        "minProtocol": 3,
+                        "maxProtocol": 3,
+                        "client": {
+                            "id": "gateway-client",
+                            "displayName": "Engram Trading Assistant",
+                            "version": "1.0.0",
+                            "platform": "python",
+                            "mode": "backend"
+                        },
+                        "caps": ["chat"],
+                        "auth": {
+                            "token": token
+                        },
+                        "role": "operator",
+                        "scopes": ["operator.admin"]
+                    }
+                }
+                await self._send_message(connect_msg)
+                logger.info("[OK] Sent connect request")
+                
+                # Wait for connect response
+                message = await asyncio.wait_for(self.websocket.recv(), timeout=5.0)
+                data = json.loads(message)
+                
+                if data.get("type") == "res" and data.get("ok") == True:
+                    logger.info("[OK] Authentication successful")
+                    return True
+                else:
+                    logger.error(f"[ERROR] Authentication failed: {data}")
+                    return False
+            else:
+                logger.warning(f"[WARN] Unexpected initial message: {data}")
+                # Continue anyway - might be a different protocol version
+                return True
+                
+        except asyncio.TimeoutError:
+            logger.error("[ERROR] Authentication timeout")
+            return False
+        except Exception as e:
+            logger.error(f"[ERROR] Authentication error: {e}")
             return False
     
     async def _send_hello(self):
-        """Send hello/handshake message to gateway"""
-        hello_msg = {
-            "type": "hello",
-            "agent": {
-                "id": "engram",
-                "name": "Engram Trading Assistant",
-                "version": "1.0.0",
-                "capabilities": ["trading_analysis", "market_signals", "risk_assessment"]
-            },
-            "timestamp": datetime.now().isoformat()
-        }
-        
-        await self._send_message(hello_msg)
-        logger.info("Sent hello message to gateway")
+        """Send hello/handshake message to gateway (not used for ClawdBot)"""
+        # ClawdBot uses auth challenge-response instead of hello
+        pass
     
     async def _send_message(self, message: Dict[str, Any]):
         """
@@ -147,7 +189,7 @@ class EngramAgent:
         }
         await self._send_message(pong_msg)
     
-    async def handle_message(self, message: Dict[str, Any]) -> Dict[str, Any]:
+    async def handle_message(self, message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
         Handle incoming message from gateway
         
@@ -155,28 +197,71 @@ class EngramAgent:
             message: Message dictionary
             
         Returns:
-            Response dictionary
+            Response dictionary or None if no response needed
         """
         msg_type = message.get("type")
         
         # Handle ping
         if msg_type == "ping":
             await self._send_pong(message.get("data"))
-            return {"type": "pong", "status": "ok"}
+            return None  # No response needed - pong already sent
         
-        # Handle event messages (FIX for 1008 error)
+        # Handle event messages
         if msg_type == "event":
             await self._handle_event(message)
-            return {"type": "event_ack", "status": "ok"}
+            return None  # Events don't need responses
         
         # Handle pong
         if msg_type == "pong":
             logger.debug("[OK] Received pong from gateway")
-            return {"type": "pong_ack", "status": "ok"}
+            return None
         
-        # Handle user message
-        if msg_type == "message":
-            content = message.get("content", "")
+        # Handle request frames from ClawdBot (type: "req")
+        if msg_type == "req":
+            method = message.get("method")
+            req_id = message.get("id")
+            params = message.get("params", {})
+            
+            logger.info(f"[REQUEST] Method: {method}, ID: {req_id}")
+            
+            # Handle chat.send method (Telegram messages routed through ClawdBot)
+            if method == "chat.send":
+                content = params.get("message", "")
+                context = params.get("context", {})
+                
+                # Check if it's a command
+                if content.startswith("/"):
+                    response_text = await self._handle_command(content, context)
+                else:
+                    # Process with skill
+                    response_text = await self.skill.process_message(content, context)
+                
+                # Send response as a response frame
+                return {
+                    "type": "res",
+                    "id": req_id,
+                    "ok": True,
+                    "payload": {
+                        "message": response_text,
+                        "agent": "engram"
+                    }
+                }
+            
+            # Handle other methods
+            logger.info(f"[REQUEST] Unhandled method: {method}")
+            return {
+                "type": "res",
+                "id": req_id,
+                "ok": False,
+                "error": {
+                    "code": "METHOD_NOT_FOUND",
+                    "message": f"Method {method} not implemented"
+                }
+            }
+        
+        # Handle user chat message (ClawdBot uses 'chat' type)
+        if msg_type == "chat" or msg_type == "message":
+            content = message.get("message", message.get("content", ""))
             context = message.get("context", {})
             
             # Check if it's a command
@@ -186,12 +271,17 @@ class EngramAgent:
                 # Process with skill
                 response_text = await self.skill.process_message(content, context)
             
+            # Send response back as chat message
             return {
-                "type": "response",
-                "content": response_text,
-                "agent": "engram",
-                "timestamp": datetime.now().isoformat()
+                "type": "chat",
+                "message": response_text,
+                "agent": "engram"
             }
+        
+        # Handle response messages (from other agents)
+        if msg_type == "response":
+            logger.debug(f"[OK] Received response: {message.get('response', '')[:100]}...")
+            return None
         
         # Handle health check
         if msg_type == "health_check":
@@ -204,10 +294,7 @@ class EngramAgent:
         
         # Unknown message type
         logger.warning(f"[WARN] Unknown message type: {msg_type}")
-        return {
-            "type": "error",
-            "error": f"Unknown message type: {msg_type}"
-        }
+        return None
     
     async def _handle_event(self, event: Dict[str, Any]):
         """
@@ -217,19 +304,24 @@ class EngramAgent:
         Args:
             event: Event message dictionary
         """
-        event_type = event.get("event_type", "unknown")
-        event_data = event.get("data", {})
+        event_type = event.get("event", event.get("event_type", "unknown"))
+        payload = event.get("payload", event.get("data", {}))
         
         logger.info(f"[EVENT] Received event: {event_type}")
-        logger.debug(f"[EVENT] Event data: {event_data}")
+        logger.debug(f"[EVENT] Payload: {payload}")
         
         # Process different event types
-        if event_type == "agent_registered":
+        if event_type == "auth.success":
+            logger.info("[OK] Agent successfully authenticated with gateway")
+        elif event_type == "agent_registered":
             logger.info("[OK] Agent successfully registered with gateway")
         elif event_type == "channel_connected":
-            logger.info(f"[OK] Channel connected: {event_data.get('channel')}")
+            logger.info(f"[OK] Channel connected: {payload.get('channel')}")
         elif event_type == "channel_disconnected":
-            logger.warning(f"[WARN] Channel disconnected: {event_data.get('channel')}")
+            logger.warning(f"[WARN] Channel disconnected: {payload.get('channel')}")
+        elif event_type == "connect.challenge":
+            # Already handled in _authenticate
+            pass
         else:
             logger.debug(f"[EVENT] Unhandled event type: {event_type}")
     
@@ -385,12 +477,14 @@ Examples:
                 try:
                     # Parse JSON message
                     data = json.loads(message)
+                    logger.info(f"[RECV] Type: {data.get('type', 'unknown')}, Event: {data.get('event', 'N/A')}, Method: {data.get('method', 'N/A')}")
+                    logger.debug(f"[RECV FULL] {data}")
                     
                     # Handle message
                     response = await self.handle_message(data)
                     
-                    # Send response if not a pong or event_ack (already handled)
-                    if response.get("type") not in ["pong", "pong_ack", "event_ack"]:
+                    # Send response if there is one
+                    if response:
                         await self._send_message(response)
                         
                 except json.JSONDecodeError as e:
@@ -398,8 +492,8 @@ Examples:
                 except Exception as e:
                     logger.error(f"[ERROR] Error handling message: {e}")
                     
-        except websockets.exceptions.ConnectionClosed:
-            logger.warning("[WARN] WebSocket connection closed")
+        except websockets.exceptions.ConnectionClosed as e:
+            logger.warning(f"[WARN] WebSocket connection closed: {e}")
         except Exception as e:
             logger.error(f"[ERROR] Error in listen loop: {e}")
     

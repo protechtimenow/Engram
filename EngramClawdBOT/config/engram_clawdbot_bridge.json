@@ -1,0 +1,168 @@
+{
+  "bridge_name": "Engram-Clawdbot Integration Bridge",
+  "version": "1.0.0",
+  "description": "Configuration bridge between Engram Trading System and Clawdbot",
+  
+  "engram_config": {
+    "project_root": "C:/Users/OFFRSTAR0/Engram",
+    "config_dir": "config",
+    "scripts_dir": "scripts",
+    "src_dir": "src",
+    "logs_dir": "logs"
+  },
+  
+  "clawdbot_config": {
+    "project_root": "C:/Users/OFFRSTAR0/Engram/clawdbot_repo",
+    "skills_dir": "skills",
+    "config_file": "../../../home/offstar0/.clawdbot/clawdbot.json"
+  },
+  
+  "service_endpoints": {
+    "engram_api": {
+      "host": "localhost",
+      "port": 8000,
+      "base_url": "http://localhost:8000",
+      "endpoints": {
+        "sentiment": "/api/engram/financial/sentiment",
+        "trends": "/api/engram/financial/trends",
+        "analysis": "/api/engram/financial/analysis",
+        "health": "/api/engram/financial/health"
+      }
+    },
+    "dashboard": {
+      "host": "localhost",
+      "port": 8585,
+      "base_url": "http://localhost:8585",
+      "endpoints": {
+        "data": "/api/dashboard/data"
+      }
+    },
+    "freqtrade": {
+      "host": "localhost",
+      "port": 8080,
+      "base_url": "http://localhost:8080",
+      "endpoints": {
+        "status": "/api/v1/status",
+        "balance": "/api/v1/balance",
+        "trades": "/api/v1/trades"
+      }
+    },
+    "clawdbot_gateway": {
+      "host": "localhost",
+      "port": 3000,
+      "base_url": "http://localhost:3000",
+      "endpoints": {
+        "status": "/api/clawdbot/status",
+        "message": "/api/clawdbot/message",
+        "alert": "/api/clawdbot/alert"
+      }
+    }
+  },
+  
+  "messaging_channels": {
+    "telegram": {
+      "enabled": true,
+      "bot_token_env": "TELEGRAM_BOT_TOKEN",
+      "chat_id_env": "TELEGRAM_CHAT_ID",
+      "commands": [
+        "/status",
+        "/balance",
+        "/analyze",
+        "/sentiment",
+        "/trends",
+        "/alerts"
+      ]
+    },
+    "discord": {
+      "enabled": false,
+      "bot_token_env": "DISCORD_BOT_TOKEN",
+      "guild_id_env": "DISCORD_GUILD_ID"
+    },
+    "slack": {
+      "enabled": false,
+      "bot_token_env": "SLACK_BOT_TOKEN",
+      "channel_id_env": "SLACK_CHANNEL_ID"
+    }
+  },
+  
+  "data_sync": {
+    "enabled": true,
+    "sync_interval": 60,
+    "sync_sources": [
+      "reddit_sentiment",
+      "market_trends",
+      "trading_signals"
+    ],
+    "cache_duration": 300,
+    "max_cache_size": 1000
+  },
+  
+  "ai_integration": {
+    "lmstudio": {
+      "enabled": true,
+      "host": "192.168.56.1",
+      "port": 1234,
+      "base_url": "http://192.168.56.1:1234",
+      "model": "glm-4.7b-chat",
+      "endpoints": {
+        "models": "/v1/models",
+        "chat": "/v1/chat/completions"
+      }
+    },
+    "engram_neural": {
+      "enabled": true,
+      "max_ngram_size": 7,
+      "n_embed_per_ngram": 128,
+      "layer_ids": [8, 16, 24]
+    }
+  },
+  
+  "security": {
+    "api_keys_env_file": ".env",
+    "required_env_vars": [
+      "EXCHANGE_API_KEY",
+      "EXCHANGE_API_SECRET",
+      "TELEGRAM_BOT_TOKEN",
+      "TELEGRAM_CHAT_ID",
+      "REDDIT_CLIENT_ID",
+      "REDDIT_CLIENT_SECRET"
+    ],
+    "jwt_secret_env": "JWT_SECRET_KEY",
+    "api_server_password_env": "API_SERVER_PASSWORD"
+  },
+  
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "files": {
+      "bridge": "logs/engram_clawdbot_bridge.log",
+      "sync": "logs/data_sync.log",
+      "api": "logs/api_bridge.log"
+    },
+    "max_file_size": "10MB",
+    "backup_count": 5
+  },
+  
+  "monitoring": {
+    "health_check_interval": 30,
+    "components_to_monitor": [
+      "engram_api",
+      "dashboard",
+      "freqtrade",
+      "telegram_bot",
+      "lmstudio"
+    ],
+    "alert_on_failure": true,
+    "max_retry_attempts": 3,
+    "retry_delay": 5
+  },
+  
+  "feature_flags": {
+    "enable_sentiment_analysis": true,
+    "enable_trend_detection": true,
+    "enable_auto_trading": false,
+    "enable_multi_channel_alerts": true,
+    "enable_neural_analysis": true,
+    "enable_backtesting": true
+  }
+}

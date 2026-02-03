@@ -409,90 +409,242 @@ class ClawdBotClient:
         self.session_id = None
         self.loop = None
         self.thread = None
+        self.response_queue = asyncio.Queue()
+        self._shutdown = False
 
     def start(self):
         """Start the WebSocket client in a background thread."""
         self.loop = asyncio.new_event_loop()
         self.thread = threading.Thread(target=self._run_loop, daemon=True)
         self.thread.start()
-        time.sleep(1)  # Wait for connection
+        # Quick check - don't block long
+        time.sleep(1)
+        return self.connected
 
     def _run_loop(self):
         asyncio.set_event_loop(self.loop)
-        self.loop.run_until_complete(self._connect())
+        self.loop.run_until_complete(self._connect_loop())
+
+    async def _connect_loop(self):
+        """Maintain connection with auto-reconnect."""
+        retry_delay = 1
+        max_retries = 3
+        retries = 0
+        
+        while not self._shutdown and retries < max_retries:
+            try:
+                await self._connect()
+                if self.connected:
+                    return  # Connection successful, exit loop
+            except Exception as e:
+                retries += 1
+                if retries >= max_retries:
+                    print(f"[WARN] ClawdBot max retries reached, falling back to LMStudio")
+                    self.connected = False
+                    return
+                print(f"[WARN] ClawdBot connection error (retry {retries}/{max_retries}): {e}")
+                await asyncio.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, 10)
 
     async def _connect(self):
+        """Connect to ClawdBot Gateway with proper handshake."""
+        # Build URL with auth token as query parameter
+        ws_url_with_auth = f"{self.ws_url}?token={self.auth_token}"
+        
         try:
-            # Add auth token to WebSocket URL
-            ws_url_with_auth = f"{self.ws_url}?token={self.auth_token}"
-            async with websockets.connect(ws_url_with_auth) as websocket:
+            import hashlib
+            async with websockets.connect(
+                ws_url_with_auth,
+                subprotocols=["clawdbot-v1"],
+                ping_interval=30,
+                ping_timeout=10
+            ) as websocket:
                 self.websocket = websocket
-                self.connected = True
-                print("Connected to ClawdBot Gateway")
-                # Send hello
-                await websocket.send(json.dumps({
-                    "type": "hello",
-                    "version": "1",
-                    "userAgent": "EngramClient/1.0"
-                }))
+                print("[OK] Connected to ClawdBot Gateway")
+                
+                # Wait for challenge first
+                try:
+                    challenge_msg = await asyncio.wait_for(websocket.recv(), timeout=5.0)
+                    challenge_data = json.loads(challenge_msg)
+                    
+                    # Handle challenge
+                    if challenge_data.get("type") == "event" and challenge_data.get("event") == "connect.challenge":
+                        nonce = challenge_data["payload"]["nonce"]
+                        # Respond to challenge
+                        await websocket.send(json.dumps({
+                            "type": "challenge",
+                            "nonce": nonce
+                        }))
+                        
+                        # Now wait for hello
+                        hello_msg = await asyncio.wait_for(websocket.recv(), timeout=5.0)
+                        hello_data = json.loads(hello_msg)
+                        
+                        if hello_data.get("type") == "hello":
+                            self.session_id = hello_data.get("sessionId")
+                            print(f"[OK] ClawdBot session: {self.session_id}")
+                            
+                            # Send hello response
+                            await websocket.send(json.dumps({
+                                "type": "hello",
+                                "version": "1",
+                                "sessionId": self.session_id,
+                                "userAgent": "EngramClient/1.0"
+                            }))
+                            self.connected = True
+                            print("[OK] ClawdBot authentication complete")
+                        else:
+                            print(f"[WARN] Unexpected message after challenge: {hello_data.get('type')}")
+                            self.session_id = "unknown"
+                            self.connected = True
+                            
+                    elif challenge_data.get("type") == "hello":
+                        # No challenge, direct hello (older version)
+                        self.session_id = challenge_data.get("sessionId")
+                        print(f"[OK] ClawdBot session: {self.session_id}")
+                        self.connected = True
+                    else:
+                        print(f"[WARN] Unexpected first message: {challenge_data.get('type')}")
+                        self.session_id = "unknown"
+                        self.connected = True
+                        
+                except asyncio.TimeoutError:
+                    print("[WARN] No response from server, continuing anyway")
+                    self.session_id = "unknown"
+                    self.connected = True
+                
+                # Start listening for messages
                 await self._listen()
+                
+        except websockets.exceptions.InvalidStatusCode as e:
+            print(f"[ERROR] ClawdBot auth failed (status {e.status_code}): {e}")
+            self.connected = False
         except Exception as e:
-            print(f"ClawdBot connection failed: {e}")
+            print(f"[ERROR] ClawdBot connection failed: {e}")
             self.connected = False
 
     async def _listen(self):
+        """Listen for messages from ClawdBot."""
         try:
             async for message in self.websocket:
-                data = json.loads(message)
-                if data.get("type") == "hello":
-                    self.session_id = data.get("sessionId")
-                    print(f"ClawdBot session: {self.session_id}")
+                try:
+                    data = json.loads(message)
+                    msg_type = data.get("type")
+                    
+                    if msg_type == "hello":
+                        # Server hello/ack
+                        self.session_id = data.get("sessionId", self.session_id)
+                        print(f"[OK] ClawdBot handshake complete")
+                        
+                    elif msg_type == "event":
+                        # Handle event messages (prevents 1008 errors)
+                        event_type = data.get("event_type", "unknown")
+                        print(f"[INFO] ClawdBot event: {event_type}")
+                        
+                    elif msg_type == "ping":
+                        # Respond to ping with pong
+                        await self.websocket.send(json.dumps({
+                            "type": "pong",
+                            "timestamp": time.time()
+                        }))
+                        
+                    elif msg_type in ("chunk", "message"):
+                        # Store response for retrieval
+                        await self.response_queue.put(data)
+                        
+                    elif msg_type == "error":
+                        error_msg = data.get("error", "Unknown error")
+                        print(f"[ERROR] ClawdBot error: {error_msg}")
+                        
+                except json.JSONDecodeError:
+                    print(f"[WARN] Invalid JSON from ClawdBot: {message[:100]}")
+                    
+        except websockets.exceptions.ConnectionClosed as e:
+            print(f"[WARN] ClawdBot connection closed: {e}")
+            self.connected = False
         except Exception as e:
-            print(f"ClawdBot listen error: {e}")
+            print(f"[ERROR] ClawdBot listen error: {e}")
+            self.connected = False
 
-    def send_message(self, message, timeout=10):
+    def send_message(self, message, timeout=30):
         """Send a message to ClawdBot and get response."""
-        if not self.connected:
+        if not self.connected or not self.websocket:
             return "ClawdBot not connected"
 
         future = asyncio.run_coroutine_threadsafe(
-            self._send_message_async(message), self.loop
+            self._send_message_async(message, timeout), self.loop
         )
         try:
             return future.result(timeout=timeout)
         except Exception as e:
+            self.connected = False
             return f"Error: {e}"
 
-    async def _send_message_async(self, message):
+    async def _send_message_async(self, message, timeout):
+        """Send message and collect response with timeout."""
         if not self.websocket:
-            return "No websocket"
+            return "No websocket connection"
 
-        # Send message
-        await self.websocket.send(json.dumps({
+        # Clear any old responses
+        while not self.response_queue.empty():
+            try:
+                self.response_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+
+        # Send message with proper format
+        request = {
             "type": "message",
             "sessionId": self.session_id,
             "message": message,
-            "thinking": "high"
-        }))
-
-        # Wait for response
-        response_text = ""
+            "thinking": "low",  # Use low thinking for faster response
+            "timestamp": time.time()
+        }
+        
         try:
-            async for msg in self.websocket:
-                data = json.loads(msg)
-                if data.get("type") == "chunk":
-                    if data.get("text"):
-                        response_text += data["text"]
+            await self.websocket.send(json.dumps(request))
+        except Exception as e:
+            self.connected = False
+            return f"Send error: {e}"
+
+        # Collect response with timeout
+        response_text = ""
+        start_time = time.time()
+        
+        while time.time() - start_time < timeout:
+            try:
+                # Wait for response with short timeout
+                data = await asyncio.wait_for(self.response_queue.get(), timeout=1.0)
+                
+                msg_type = data.get("type")
+                
+                if msg_type == "chunk":
+                    chunk_text = data.get("text", "")
+                    response_text += chunk_text
                     if data.get("done"):
                         break
-                elif data.get("type") == "message":
-                    if data.get("text"):
-                        response_text = data["text"]
+                        
+                elif msg_type == "message":
+                    response_text = data.get("text", "")
                     break
-        except Exception as e:
-            return f"Response error: {e}"
-
+                    
+            except asyncio.TimeoutError:
+                # No message received yet, continue waiting
+                continue
+            except Exception as e:
+                return f"Response collection error: {e}"
+        
+        if not response_text:
+            return "No response received from ClawdBot"
+            
         return response_text
+
+    def stop(self):
+        """Stop the client gracefully."""
+        self._shutdown = True
+        self.connected = False
+        if self.loop and self.websocket:
+            asyncio.run_coroutine_threadsafe(self.websocket.close(), self.loop)
 
 class EngramModel(nn.Module):
     def __init__(self, use_clawdbot=False, clawdbot_ws_url="ws://127.0.0.1:18789", use_lmstudio=False, lmstudio_url="http://100.118.172.23:1234", clawdbot_auth_token=None):
