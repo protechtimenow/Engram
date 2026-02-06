@@ -291,7 +291,15 @@ async function runDebate(debateId: string, topic: string, context?: string, useS
     await new Promise(resolve => setTimeout(resolve, 500));
   }
   
+  // Build prompt with CURRENT price prominently featured
+  const currentPrice = marketAnalysis?.current_price;
   let initialPrompt = `Analyze this trading scenario: ${topic}`;
+  
+  if (currentPrice) {
+    initialPrompt += `\n\n**CRITICAL: Current market price is $${currentPrice.toLocaleString()}.**
+**All analysis MUST be based on this CURRENT price, not historical assumptions.**`;
+  }
+  
   if (context) {
     initialPrompt += `\n\nContext: ${context}`;
   }
@@ -302,21 +310,25 @@ async function runDebate(debateId: string, topic: string, context?: string, useS
   messages.push({ role: "user", content: initialPrompt });
 
   const proposerPrompt = `You are the PROPOSER agent in a trading analysis debate. 
-${marketAnalysis && !marketAnalysis.error ? 'You have been provided with technical analysis data above. Use this data to inform your recommendation, but add your own insights and reasoning.' : 'Analyze the trading scenario thoroughly.'}
+${marketAnalysis && !marketAnalysis.error ? `**CRITICAL INSTRUCTION**: The current price is $${currentPrice?.toLocaleString() || 'unknown'}. 
+
+You MUST base your entry, stop, and target levels on the CURRENT price, not historical prices or assumptions. If current price is $${currentPrice?.toLocaleString()}, your entry should be NEAR this level (within 5-10%), not 30-50% away.
+
+Use the technical data provided to inform your analysis.` : 'Analyze the trading scenario thoroughly.'}
 
 Your role is to:
-1. Analyze the trading scenario thoroughly
-2. Propose a clear trading strategy (entry, exit, stop-loss, position sizing)
-3. Provide technical and fundamental rationale
-4. Be confident but acknowledge key risks
+1. Analyze the trading scenario using CURRENT market price
+2. Propose entry level NEAR current price (not far away)
+3. Provide realistic targets based on current market structure
+4. Acknowledge if current price makes the trade unattractive
 
 Format your response with:
 - SIGNAL: (LONG/SHORT/NEUTRAL)
-- ENTRY: (price level)
+- ENTRY: (price level - MUST be near current price of $${currentPrice?.toLocaleString() || 'N/A'})
 - TARGET: (price target)
 - STOP: (stop loss)
 - POSITION: (% of portfolio)
-- RATIONALE: (your analysis)
+- RATIONALE: (your analysis referencing CURRENT price)
 - RISKS: (key concerns)`;
 
   const proposerResponse = await callModel(MODELS.proposer, messages, proposerPrompt);
@@ -404,23 +416,29 @@ Format your response with:
   }
 
   const consensusPrompt = `You are the CONSENSUS agent in a trading analysis debate.
+**CRITICAL: Current price is $${currentPrice?.toLocaleString() || 'unknown'}.**
+
 ${kellyCalculation && !kellyCalculation.error ? `You have been provided with Kelly criterion calculations for position sizing. Use this in your final recommendation.` : 'Synthesize the debate into a final recommendation.'}
 
 Your role is to:
-1. Synthesize the proposer's strategy and critic's feedback
-2. Make a final recommendation that balances opportunity and risk
-3. Provide clear, actionable guidance
-4. Include specific price levels and risk management
+1. VALIDATE that proposed entry is NEAR current price ($${currentPrice?.toLocaleString()})
+2. If entry is >10% from current price, recommend WAIT or ADJUST levels
+3. Synthesize proposer and critic feedback with CURRENT market reality
+4. Provide clear, actionable guidance
+
+**VALIDATION CHECK:**
+- If current price is $${currentPrice?.toLocaleString()} and entry is $2,500+, you MUST say "WAIT" or "REVISE ENTRY"
+- Entry should be within 5-10% of current market price
 
 Format your response with:
 - FINAL SIGNAL: (LONG/SHORT/NEUTRAL/WAIT)
-- ADJUSTED ENTRY: (price level)
+- ADJUSTED ENTRY: (price level - MUST be realistic from current $${currentPrice?.toLocaleString()})
 - ADJUSTED TARGET: (price target)
 - ADJUSTED STOP: (stop loss)
 - POSITION SIZE: (% of portfolio with rationale)
 - EXECUTION: (immediate/conditional on what)
 - CONFIDENCE: (HIGH/MEDIUM/LOW with explanation)
-- SUMMARY: (concise rationale for the final decision)`;
+- SUMMARY: (concise rationale including current price validation)`;
 
   const consensusMessages = [
     ...messages,
