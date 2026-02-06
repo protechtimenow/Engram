@@ -2,8 +2,43 @@ import { NextRequest, NextResponse } from "next/server";
 import { exec } from "child_process";
 import { promisify } from "util";
 import * as path from "path";
+import * as fs from "fs";
 
 const execAsync = promisify(exec);
+
+// File-based session storage for persistence across server restarts
+const SESSIONS_FILE = path.join(process.cwd(), "a2a_sessions.json");
+
+// Load sessions from file if it exists
+function loadSessions(): Map<string, DebateSession> {
+  try {
+    if (fs.existsSync(SESSIONS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(SESSIONS_FILE, 'utf-8'));
+      const sessions = new Map<string, DebateSession>();
+      for (const [key, value] of Object.entries(data)) {
+        sessions.set(key, value as DebateSession);
+      }
+      console.log(`Loaded ${sessions.size} sessions from file`);
+      return sessions;
+    }
+  } catch (e) {
+    console.error("Failed to load sessions:", e);
+  }
+  return new Map<string, DebateSession>();
+}
+
+// Save sessions to file
+function saveSessions(sessions: Map<string, DebateSession>) {
+  try {
+    const data: Record<string, DebateSession> = {};
+    sessions.forEach((value, key) => {
+      data[key] = value;
+    });
+    fs.writeFileSync(SESSIONS_FILE, JSON.stringify(data, null, 2));
+  } catch (e) {
+    console.error("Failed to save sessions:", e);
+  }
+}
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "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";
 
@@ -38,8 +73,8 @@ interface DebateSession {
   };
 }
 
-// In-memory storage for debate sessions
-const debateSessions: Map<string, DebateSession> = new Map();
+// Initialize sessions from file
+const debateSessions: Map<string, DebateSession> = loadSessions();
 
 // Utility: Quote argument for shell (Windows-compatible)
 function quoteArg(arg: string): string {
@@ -170,6 +205,7 @@ export async function POST(request: NextRequest) {
         scriptResults: {}
       };
       debateSessions.set(id, session);
+      saveSessions(debateSessions);
 
       const results = await runDebate(id, topic, context, useScripts !== false);
       
@@ -192,6 +228,8 @@ export async function POST(request: NextRequest) {
         role: "user",
         content: message,
         timestamp: new Date().toISOString()
+      });
+      saveSessions(debateSessions);
       });
 
       const results = await continueDebate(debateId, message, useScripts !== false);
@@ -402,6 +440,8 @@ Format your response with:
     timestamp: new Date().toISOString(),
     scriptData: kellyCalculation
   });
+  
+  saveSessions(debateSessions);
 
   return {
     proposer: proposerResponse,
@@ -461,6 +501,8 @@ async function continueDebate(debateId: string, message: string, useScripts: boo
     { role: "assistant", content: critic, agent: "critic", timestamp: new Date().toISOString(), scriptData: confidenceScore },
     { role: "assistant", content: consensus, agent: "consensus", timestamp: new Date().toISOString() }
   );
+  
+  saveSessions(debateSessions);
 
   return { proposer, critic, consensus };
 }
