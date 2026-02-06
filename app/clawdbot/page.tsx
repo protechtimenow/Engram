@@ -117,14 +117,16 @@ export default function ClawdBotPage() {
             data: data.data,
             timestamp: new Date().toISOString()
           }))
-        } else if (data.type === "req" && data.method === "chat.send") {
-          // Received message from bot
-          const content = data.params?.message || ""
-          setMessages(prev => [...prev, {
-            role: "assistant",
-            content: content,
-            timestamp: new Date().toLocaleTimeString()
-          }])
+        } else if (data.type === "res" && data.ok === true && data.payload) {
+          // Received response from bot
+          const content = data.payload.message || data.payload.content || ""
+          if (content) {
+            setMessages(prev => [...prev, {
+              role: "assistant",
+              content: content,
+              timestamp: new Date().toLocaleTimeString()
+            }])
+          }
         } else if (data.type === "event") {
           // Handle other events
           console.log("Event received:", data.event)
