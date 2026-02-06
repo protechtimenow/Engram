@@ -21,7 +21,7 @@ interface DebateMessage {
   content: string;
   agent?: "proposer" | "critic" | "consensus";
   timestamp: string;
-  scriptData?: any; // Store script output
+  scriptData?: any;
 }
 
 interface DebateSession {
@@ -41,11 +41,21 @@ interface DebateSession {
 // In-memory storage for debate sessions
 const debateSessions: Map<string, DebateSession> = new Map();
 
+// Utility: Quote argument for shell (Windows-compatible)
+function quoteArg(arg: string): string {
+  // If arg contains spaces, wrap in double quotes
+  if (arg.includes(' ')) {
+    return `"${arg.replace(/"/g, '""')}"`;
+  }
+  return arg;
+}
+
 // Utility: Execute Python script
 async function runPythonScript(scriptName: string, args: string[]): Promise<any> {
   try {
     const scriptPath = path.join(SCRIPTS_DIR, scriptName);
-    const command = `python "${scriptPath}" ${args.join(" ")}`;
+    const quotedArgs = args.map(quoteArg).join(" ");
+    const command = `python "${scriptPath}" ${quotedArgs}`;
     
     console.log(`Executing: ${command}`);
     const { stdout, stderr } = await execAsync(command, { timeout: 30000 });
@@ -69,18 +79,17 @@ async function runPythonScript(scriptName: string, args: string[]): Promise<any>
 
 // Utility: Extract trading pair from text
 function extractTradingPair(text: string): string | null {
-  // Common patterns: BTC/USD, ETH-USD, BTCUSD, etc.
   const patterns = [
-    /\b([A-Z]{2,5})\s*\/\s*([A-Z]{2,5})\b/,  // BTC/USD
-    /\b([A-Z]{2,5})\s*-\s*([A-Z]{2,5})\b/,  // BTC-USD
-    /\b([A-Z]{2,5})(USD|EUR|GBP|JPY|USDT)\b/, // BTCUSD
+    /\b([A-Z]{2,5})\s*\/\s*([A-Z]{2,5})\b/,
+    /\b([A-Z]{2,5})\s*-\s*([A-Z]{2,5})\b/,
+    /\b([A-Z]{2,5})(USD|EUR|GBP|JPY|USDT)\b/,
   ];
   
   for (const pattern of patterns) {
     const match = text.match(pattern);
     if (match) {
       if (match[2] && !match[2].match(/^(USD|EUR|GBP|JPY|USDT|BTC|ETH)$/)) {
-        continue; // Second part isn't a valid currency
+        continue;
       }
       return match[2] ? `${match[1]}/${match[2]}` : match[0];
     }
@@ -92,18 +101,15 @@ function extractTradingPair(text: string): string | null {
 // Utility: Extract price levels from text
 function extractPriceLevels(text: string): { entry?: number; target?: number; stop?: number } {
   const levels: { entry?: number; target?: number; stop?: number } = {};
-  
-  // Look for price patterns
   const pricePattern = /\$?([\d,]+\.?\d*)/g;
   const prices: number[] = [];
   let match;
   
   while ((match = pricePattern.exec(text)) !== null) {
     const price = parseFloat(match[1].replace(/,/g, ""));
-    if (price > 100) prices.push(price); // Filter out small numbers
+    if (price > 100) prices.push(price);
   }
   
-  // Sort and assign (lowest = stop, middle = entry, highest = target for longs)
   if (prices.length >= 1) levels.entry = prices[0];
   if (prices.length >= 2) levels.target = Math.max(...prices);
   if (prices.length >= 3) {
@@ -150,7 +156,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { action, debateId, topic, message, context, useScripts } = body;
 
-    // Start a new debate
     if (action === "start") {
       const id = Date.now().toString(36) + Math.random().toString(36).substr(2);
       const extractedPair = extractTradingPair(topic);
@@ -166,7 +171,6 @@ export async function POST(request: NextRequest) {
       };
       debateSessions.set(id, session);
 
-      // Run the debate rounds (with or without scripts)
       const results = await runDebate(id, topic, context, useScripts !== false);
       
       return NextResponse.json({ 
@@ -178,21 +182,18 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Continue an existing debate
     if (action === "continue" && debateId) {
       const session = debateSessions.get(debateId);
       if (!session) {
         return NextResponse.json({ error: "Debate not found" }, { status: 404 });
       }
 
-      // Add user message
       session.messages.push({
         role: "user",
         content: message,
         timestamp: new Date().toISOString()
       });
 
-      // Get responses from all agents
       const results = await continueDebate(debateId, message, useScripts !== false);
       
       return NextResponse.json({
@@ -202,7 +203,6 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Get debate status
     if (action === "status" && debateId) {
       const session = debateSessions.get(debateId);
       if (!session) {
@@ -211,7 +211,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ session });
     }
 
-    // Run individual script
     if (action === "script") {
       const { script, args } = body;
       const result = await runPythonScript(script, args || []);
@@ -237,11 +236,9 @@ async function runDebate(debateId: string, topic: string, context?: string, useS
   let confidenceScore: any = null;
   let kellyCalculation: any = null;
   
-  // Run Python scripts if enabled and we have a trading pair
   if (useScripts && session.extractedPair) {
     console.log(`Running scripts for pair: ${session.extractedPair}`);
     
-    // Market Analysis
     try {
       marketAnalysis = await runPythonScript("analyze_market.py", [
         "--pair", session.extractedPair,
@@ -253,10 +250,9 @@ async function runDebate(debateId: string, topic: string, context?: string, useS
       console.error("Market analysis failed:", e);
     }
     
-    await new Promise(resolve => setTimeout(resolve, 500)); // Rate limit buffer
+    await new Promise(resolve => setTimeout(resolve, 500));
   }
   
-  // Build initial prompt with script data
   let initialPrompt = `Analyze this trading scenario: ${topic}`;
   if (context) {
     initialPrompt += `\n\nContext: ${context}`;
@@ -267,7 +263,6 @@ async function runDebate(debateId: string, topic: string, context?: string, useS
   
   messages.push({ role: "user", content: initialPrompt });
 
-  // Proposer Agent - uses market analysis
   const proposerPrompt = `You are the PROPOSER agent in a trading analysis debate. 
 ${marketAnalysis && !marketAnalysis.error ? 'You have been provided with technical analysis data above. Use this data to inform your recommendation, but add your own insights and reasoning.' : 'Analyze the trading scenario thoroughly.'}
 
@@ -295,10 +290,9 @@ Format your response with:
     scriptData: marketAnalysis
   });
 
-  // Extract claim from proposer for confidence scoring
-  const proposerClaim = proposerResponse.split('\n')[0] || "The proposed trade is valid";
+  // Extract a shorter claim for confidence scoring (first line or first 100 chars)
+  const proposerClaim = proposerResponse.split('\n')[0].slice(0, 100) || "Trade proposal analysis";
   
-  // Run confidence scoring for critic
   if (useScripts) {
     try {
       confidenceScore = await runPythonScript("confidence_scoring.py", [
@@ -316,7 +310,6 @@ Format your response with:
     await new Promise(resolve => setTimeout(resolve, 500));
   }
 
-  // Critic Agent - uses confidence scoring
   const criticPrompt = `You are the CRITIC agent in a trading analysis debate.
 ${confidenceScore && !confidenceScore.error ? `You have been provided with confidence scoring data for the proposer's claim. Use this to identify specific weaknesses.` : 'Review the proposer\'s analysis critically.'}
 
@@ -352,13 +345,11 @@ Format your response with:
     scriptData: confidenceScore
   });
 
-  // Extract levels for Kelly calculation
   const priceLevels = extractPriceLevels(proposerResponse);
   
-  // Run Kelly calculation for consensus
   if (useScripts && priceLevels.entry && priceLevels.target) {
     try {
-      const edge = 0.6; // Estimated from analysis
+      const edge = 0.6;
       const odds = priceLevels.target / priceLevels.entry;
       
       kellyCalculation = await runPythonScript("decision_nets.py", [
@@ -374,7 +365,6 @@ Format your response with:
     }
   }
 
-  // Consensus Agent - uses Kelly calculation
   const consensusPrompt = `You are the CONSENSUS agent in a trading analysis debate.
 ${kellyCalculation && !kellyCalculation.error ? `You have been provided with Kelly criterion calculations for position sizing. Use this in your final recommendation.` : 'Synthesize the debate into a final recommendation.'}
 
@@ -439,12 +429,12 @@ async function continueDebate(debateId: string, message: string, useScripts: boo
     { role: "user", content: message }
   ];
 
-  // Check if follow-up is about confidence/risk
   let confidenceScore: any = null;
   if (useScripts && message.toLowerCase().match(/confidence|risk|bias|uncertainty/)) {
     try {
+      const claim = message.slice(0, 100);
       confidenceScore = await runPythonScript("confidence_scoring.py", [
-        "--claim", message,
+        "--claim", claim,
         "--domain", "trading",
         "--bias-check",
         "--output", "json"
@@ -454,7 +444,6 @@ async function continueDebate(debateId: string, message: string, useScripts: boo
     }
   }
 
-  // All agents respond to the follow-up
   const [proposer, critic, consensus] = await Promise.all([
     callModel(MODELS.proposer, messages, "You are the PROPOSER. Respond to the user's follow-up question based on the debate history."),
     callModel(MODELS.critic, [
