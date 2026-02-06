@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { routeA2AAgents, getCostStats, resetCostStats, RoutingDecision } from "../../lib/modelRouter";
+import { routeA2AAgents, getCostStats, resetCostStats, RoutingDecision } from "../lib/modelRouter";
 
 // Track routing decisions for the session
 const routingHistory: RoutingDecision[] = [];
@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
       ];
 
       const results = tests.map(t => {
-        const { routeModel } = require("../../lib/modelRouter");
+        const { routeModel } = require("../lib/modelRouter");
         const decision = routeModel(t.query);
         return {
           query: t.query,
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
 
     if (action === "route") {
       // Test routing for a specific prompt
-      const { routeModel } = require("../../lib/modelRouter");
+      const { routeModel } = require("../lib/modelRouter");
       const decision = routeModel(topic || context || "", forceTier);
       
       routingHistory.push(decision);

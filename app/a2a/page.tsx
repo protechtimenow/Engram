@@ -1,13 +1,13 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { 
-  Users, 
-  Send, 
-  Sparkles, 
-  TrendingUp, 
-  AlertTriangle, 
-  CheckCircle2, 
+import {
+  Users,
+  Send,
+  Sparkles,
+  TrendingUp,
+  AlertTriangle,
+  CheckCircle2,
   MessageSquare,
   RotateCcw,
   Brain,
@@ -19,7 +19,10 @@ import {
   Code2,
   BarChart3,
   Shield,
-  Calculator
+  Calculator,
+  Lightbulb,
+  DollarSign,
+  Zap
 } from "lucide-react"
 
 interface ScriptData {
@@ -42,36 +45,75 @@ interface DebateSession {
   messages: DebateMessage[]
   status: "active" | "completed"
   extractedPair?: string
+  tierDistribution?: {
+    proposer: string
+    critic: string
+    consensus: string
+  }
+  estimatedCost?: number
+  routingEnabled?: boolean
+}
+
+interface TierConfig {
+  SIMPLE: {
+    model: string
+    description: string
+    price: string
+  }
+  MEDIUM: {
+    model: string
+    description: string
+    price: string
+  }
+  COMPLEX: {
+    model: string
+    description: string
+    price: string
+  }
+  REASONING: {
+    model: string
+    description: string
+    price: string
+  }
 }
 
 const AGENT_CONFIG = {
   proposer: {
     name: "Proposer",
-    model: "Claude Opus 4.6",
     icon: Target,
     color: "purple",
     bgColor: "bg-purple-500/10",
     borderColor: "border-purple-500/30",
     textColor: "text-purple-400",
     description: "Builds the initial trading strategy",
-    scriptIcon: BarChart3,
-    scriptName: "analyze_market.py"
+    scriptIcon: Target,
+    scriptName: "analyze_market.py",
+    tierConfig: {
+      SIMPLE: { model: "DeepSeek Chat", price: "$0.28/M" },
+      MEDIUM: { model: "GPT-4o Mini", price: "$0.15/M" },
+      COMPLEX: { model: "Claude Opus 4.6", price: "$75/M" },
+      REASONING: { model: "DeepSeek R1", price: "$2.78/M" }
+    }
   },
   critic: {
-    name: "Critic", 
-    model: "Claude 3.5 Sonnet",
+    name: "Critic",
     icon: AlertTriangle,
     color: "amber",
     bgColor: "bg-amber-500/10",
     borderColor: "border-amber-500/30",
     textColor: "text-amber-400",
     description: "Challenges assumptions & finds risks",
-    scriptIcon: Shield,
-    scriptName: "confidence_scoring.py"
+    scriptIcon: AlertTriangle,
+    scriptName: "confidence_scoring.py",
+    tierConfig: {
+      SIMPLE: { model: "DeepSeek Chat", price: "$0.28/M" },
+      MEDIUM: { model: "GPT-4o Mini", price: "$0.15/M" },
+      COMPLEX: { model: "Claude Sonnet", price: "$3.00/M" },
+      REASONING: { model: "DeepSeek R1", price: "$2.78/M" }
+    }
   },
   consensus: {
     name: "Consensus",
-    model: "GLM 4.7 Flash",
     icon: Scale,
     color: "cyan",
     bgColor: "bg-cyan-500/10",
@@ -79,19 +121,27 @@ const AGENT_CONFIG = {
     textColor: "text-cyan-400",
     description: "Synthesizes final recommendation",
     scriptIcon: Calculator,
-    scriptName: "decision_nets.py"
+    scriptName: "decision_nets.py",
+    tierConfig: {
+      SIMPLE: { model: "DeepSeek Chat", price: "$0.28/M" },
+      MEDIUM: { model: "GPT-4o Mini", price: "$0.15/M" },
+      COMPLEX: { model: "Claude Sonnet", price: "$3.00/M" },
+      REASONING: { model: "DeepSeek R1", price: "$2.78/M" }
+    }
   }
 }
 
 // Script Results Panel Component
-function ScriptResultsPanel({ data, agent }: { data: any; agent: string }) {
+function ScriptResultsPanel({ data, agent, tierDistribution }: { data: any; agent: string; tierDistribution?: { proposer: string; critic: string; consensus: string } }) {
   const [isExpanded, setIsExpanded] = useState(false)
   
   if (!data) return null
   
   const config = AGENT_CONFIG[agent as keyof typeof AGENT_CONFIG]
   const ScriptIcon = config?.scriptIcon || Code2
-  
+  const tier = (tierDistribution?.[agent as keyof typeof tierDistribution] || 'SIMPLE')
+  const tierConfig = config?.tierConfig?.[tier as keyof typeof config.tierConfig] || config?.tierConfig?.SIMPLE
+
   return (
     <div className="mt-3 rounded-lg border border-gray-700/50 bg-gray-900/50">
       <button
@@ -99,19 +149,23 @@ function ScriptResultsPanel({ data, agent }: { data: any; agent: string }) {
         className="flex w-full items-center justify-between px-3 py-2 text-left text-xs text-gray-400 hover:text-gray-300"
       >
         <div className="flex items-center gap-2">
-          <ScriptIcon className="h-3 w-3" />
-          <span>Script: {config?.scriptName}</span>
+          <Zap className="h-3 w-3 text-yellow-400" />
+          <span>Tier: <span className="text-yellow-400 font-semibold">{tier}</span></span>
           {data.error ? (
             <span className="text-red-400">(error)</span>
           ) : (
             <span className="text-green-400">(success)</span>
           )}
+          <span className="ml-2 rounded-full bg-blue-500/10 px-2 py-0.5 text-xs text-blue-400">{tierConfig?.price}</span>
         </div>
         {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
       </button>
-      
+
       {isExpanded && (
         <div className="border-t border-gray-700/50 px-3 py-2">
+          <div className="mb-2 text-xs text-gray-400">
+            <span className="font-semibold">Model: </span>{tierConfig?.model}
+          </div>
           <pre className="max-h-48 overflow-auto text-xs text-gray-500">
             {JSON.stringify(data, null, 2)}
           </pre>
@@ -260,7 +314,7 @@ export default function A2APage() {
               {config.name}
             </div>
             <div className="text-xs text-gray-500">
-              {config.model}
+              {config.tierConfig.SIMPLE.model}
             </div>
           </div>
           <div className="ml-auto text-xs text-gray-600">
@@ -273,7 +327,7 @@ export default function A2APage() {
         
         {/* Script Results */}
         {msg.scriptData && (
-          <ScriptResultsPanel data={msg.scriptData} agent={msg.agent} />
+          <ScriptResultsPanel data={msg.scriptData} agent={msg.agent} tierDistribution={session?.tierDistribution} />
         )}
       </div>
     )
@@ -334,7 +388,7 @@ export default function A2APage() {
                   <Icon className={`h-4 w-4 ${config.textColor}`} />
                   <span className={`font-medium ${config.textColor}`}>{config.name}</span>
                 </div>
-                <div className="text-xs text-gray-500">{config.model}</div>
+                <div className="text-xs text-gray-500">{config.tierConfig.SIMPLE.model}</div>
                 <div className="mt-2 text-xs text-gray-400">{config.description}</div>
                 <div className="mt-2 flex items-center gap-1 text-xs text-green-400">
                   <ScriptIcon className="h-3 w-3" />

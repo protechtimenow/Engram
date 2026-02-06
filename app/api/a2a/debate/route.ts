@@ -4,6 +4,18 @@ import * as fs from "fs";
 import { analyzeMarket } from "../../lib/marketAnalyzer";
 import { scoreConfidence } from "../../lib/confidenceScorer";
 import { calculateKelly } from "../../lib/kellyCalculator";
+import {
+  routeAllAgents,
+  assignTier,
+  getTierModel,
+  getTierLabel,
+  estimateDebateCost,
+  TierAssignment,
+  TIER_CONFIG
+} from "../../lib/tierRouter";
+
+// Feature flag: enable tiered routing
+const ENABLE_TIER_ROUTING = process.env.ENABLE_TIER_ROUTING !== "false";
 
 // File-based session storage
 const SESSIONS_FILE = path.join(process.cwd(), "a2a_sessions.json");
@@ -38,6 +50,7 @@ function saveSessions(sessions: Map<string, DebateSession>) {
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
 
+// Dynamic model routing based on tier
 const MODELS = {
   proposer: "anthropic/claude-opus-4.6",
   critic: "anthropic/claude-3-5-sonnet",
@@ -64,6 +77,14 @@ interface DebateSession {
     confidenceScore?: any;
     kellyCalculation?: any;
   };
+  tierDistribution?: {
+    proposer: string;
+    critic: string;
+    consensus: string;
+  };
+  estimatedCost?: number;
+  executionTime?: number;
+  routingEnabled?: boolean;
 }
 
 const debateSessions: Map<string, DebateSession> = loadSessions();
@@ -213,59 +234,118 @@ export async function POST(request: NextRequest) {
 }
 
 async function runDebate(debateId: string, topic: string, context?: string, useScripts: boolean = true) {
+  const startTime = Date.now();
   const session = debateSessions.get(debateId)!;
   const messages: { role: string; content: string }[] = [];
-  
+
+  // Enable routing if feature flag is on
+  const routingEnabled = ENABLE_TIER_ROUTING;
+
   let marketAnalysis: any = null;
   let confidenceScore: any = null;
   let kellyCalculation: any = null;
   let currentPrice: number | null = null;
-  
+
   // Use TypeScript market analysis instead of Python
   if (useScripts && session.extractedPair) {
-    console.log(`Running analysis for pair: ${session.extractedPair}`);
-    
+    console.log(`\n🚀 [A2A-Router] Running analysis for pair: ${session.extractedPair}`);
+
     try {
       // Extract price from pair or use default
       const symbol = session.extractedPair.replace('/', '');
-      currentPrice = symbol.includes('BTC') ? 65000 : 
-                     symbol.includes('ETH') ? 3500 : 
+      currentPrice = symbol.includes('BTC') ? 65000 :
+                     symbol.includes('ETH') ? 3500 :
                      symbol.includes('SOL') ? 150 : 1000;
-      
+
       marketAnalysis = analyzeMarket(
         session.extractedPair,
         currentPrice,
         "1h",
         context
       );
-      
+
       session.scriptResults!.marketAnalysis = marketAnalysis;
       currentPrice = marketAnalysis.current_price;
-      console.log("Market analysis complete:", currentPrice);
+      console.log(`✅ [A2A-Router] Market analysis complete: $${currentPrice?.toLocaleString() || 'N/A'}`);
     } catch (e) {
-      console.error("Market analysis failed:", e);
+      console.error("❌ [A2A-Router] Market analysis failed:", e);
     }
   }
-  
+
   // Build prompt with current price
   let initialPrompt = `Analyze this trading scenario: ${topic}`;
-  
+
   if (currentPrice) {
     initialPrompt += `\n\n**CRITICAL: Current market price is $${currentPrice.toLocaleString()}.**`;
     initialPrompt += `\n**All analysis MUST be based on this CURRENT price.**`;
   }
-  
+
   if (context) {
     initialPrompt += `\n\nContext: ${context}`;
   }
   if (marketAnalysis) {
     initialPrompt += `\n\n[TECHNICAL DATA]\n${JSON.stringify(marketAnalysis, null, 2)}`;
   }
-  
+
   messages.push({ role: "user", content: initialPrompt });
 
+  // Route all three agents based on complexity
+  const agentPrompts = {
+    proposer: currentPrice
+      ? `You are the PROPOSER agent in a trading analysis debate.
+**CRITICAL**: Current price is $${currentPrice.toLocaleString()}. Entry must be NEAR this level (within 5-10%).
+
+Format your response with:
+- SIGNAL: (LONG/SHORT/NEUTRAL)
+- ENTRY: (price level - NEAR current price)
+- TARGET: (price target)
+- STOP: (stop loss)
+- POSITION: (% of portfolio)
+- RATIONALE: (your analysis)
+- RISKS: (key concerns)`
+      : `You are the PROPOSER agent in a trading analysis debate.
+Format your response with:
+- SIGNAL: (LONG/SHORT/NEUTRAL)
+- ENTRY: (price level)
+- TARGET: (price target)
+- STOP: (stop loss)
+- POSITION: (% of portfolio)
+- RATIONALE: (your analysis)
+- RISKS: (key concerns)`,
+    critic: `You are the CRITIC agent. Review the analysis critically.`,
+    consensus: currentPrice
+      ? `You are the CONSENSUS agent.
+**Current price: $${currentPrice.toLocaleString()}**
+Analyze all inputs and provide the final recommendation.`
+      : `You are the CONSENSUS agent.
+Analyze all inputs and provide the final recommendation.`
+  };
+
+  // Get tier assignments for all agents
+  let tierAssignment: TierAssignment[] | null = null;
+  if (routingEnabled) {
+    console.log(`🎯 [A2A-Router] Scoring dimensionality...`);
+    tierAssignment = await routeAllAgents(agentPrompts, context);
+  }
+
+  // Run routed debate
+  const results: any = {};
+  const tierDistribution: { proposer: string; critic: string; consensus: string } = { proposer: 'SIMPLE', critic: 'SIMPLE', consensus: 'SIMPLE' };
+
   // Proposer Agent
-  const proposerPrompt = `You are the PROPOSER agent in a trading analysis debate.
+  if (routingEnabled && tierAssignment) {
+    const proposerTier = tierAssignment.find(a => a.agent === 'proposer');
+    tierDistribution.proposer = proposerTier?.tier || 'SIMPLE';
+
+    console.log(`✨ [A2A-Router] Proposer routing: ${getTierLabel(proposerTier?.tier || 'SIMPLE')} → ${proposerTier?.model || MODELS.proposer}`);
+
+    // Use tier-based prompt
+    const proposerModel = proposerTier?.model || MODELS.proposer;
+    const proposerTierPrompt = createTierPrompt(proposerTier?.tier || 'SIMPLE', 'Proposer agent');
+
+    results.proposer = await callModel(proposerModel, messages, proposerTierPrompt);
+  } else {
+    const proposerResponse = await callModel(MODELS.proposer, messages, `You are the PROPOSER agent in a trading analysis debate.
 ${currentPrice ? `**CRITICAL**: Current price is $${currentPrice.toLocaleString()}. Entry must be NEAR this level (within 5-10%).` : ''}
 
 Format your response with:
@@ -275,65 +355,99 @@ Format your response with:
 - STOP: (stop loss)
 - POSITION: (% of portfolio)
 - RATIONALE: (your analysis)
-- RISKS: (key concerns)`;
+- RISKS: (key concerns)`);
+    results.proposer = proposerResponse;
+  }
 
-  const proposerResponse = await callModel(MODELS.proposer, messages, proposerPrompt);
   session.messages.push({
     role: "assistant",
-    content: proposerResponse,
+    content: results.proposer,
     agent: "proposer",
     timestamp: new Date().toISOString(),
     scriptData: marketAnalysis
   });
 
   // Confidence Scoring (TypeScript)
-  const proposerClaim = proposerResponse.split('\n')[0].slice(0, 100) || "Trade proposal";
-  
+  const proposerClaim = results.proposer.split('\n')[0].slice(0, 100) || "Trade proposal";
+
   if (useScripts) {
     try {
       confidenceScore = scoreConfidence(proposerClaim, undefined, "trading");
       session.scriptResults!.confidenceScore = confidenceScore;
-      console.log("Confidence scoring complete");
+      console.log("✅ [A2A-Router] Confidence scoring complete");
     } catch (e) {
-      console.error("Confidence scoring failed:", e);
+      console.error("❌ [A2A-Router] Confidence scoring failed:", e);
     }
   }
 
   // Critic Agent
-  const criticPrompt = `You are the CRITIC agent. Review the analysis critically.`;
+  if (routingEnabled && tierAssignment) {
+    const criticTier = tierAssignment.find(a => a.agent === 'critic');
+    tierDistribution.critic = criticTier?.tier || 'MEDIUM';
 
-  const criticMessages = [
-    ...messages,
-    { role: "assistant", content: proposerResponse }
-  ];
-  
-  const criticResponse = await callModel(MODELS.critic, criticMessages, criticPrompt);
+    console.log(`✨ [A2A-Router] Critic routing: ${getTierLabel(criticTier?.tier || 'MEDIUM')} → ${criticTier?.model || MODELS.critic}`);
+
+    const criticModel = criticTier?.model || MODELS.critic;
+    const criticTierPrompt = createTierPrompt(criticTier?.tier || 'MEDIUM', 'Critic agent');
+
+    results.critic = await callModel(criticModel, [...messages, { role: "assistant", content: results.proposer }], criticTierPrompt);
+  } else {
+    const criticResponse = await callModel(MODELS.critic, [...messages, { role: "assistant", content: results.proposer }], "You are the CRITIC agent. Review the analysis critically.");
+    results.critic = criticResponse;
+  }
+
   session.messages.push({
     role: "assistant",
-    content: criticResponse,
+    content: results.critic,
     agent: "critic",
     timestamp: new Date().toISOString(),
     scriptData: confidenceScore
   });
 
   // Kelly Calculation (TypeScript)
-  const priceLevels = extractPriceLevels(proposerResponse);
-  
+  const priceLevels = extractPriceLevels(results.proposer);
+
   if (useScripts && priceLevels.entry && priceLevels.target) {
     try {
       const edge = 0.6;
       const odds = priceLevels.target / priceLevels.entry;
-      
+
       kellyCalculation = calculateKelly(edge, odds);
       session.scriptResults!.kellyCalculation = kellyCalculation;
-      console.log("Kelly calculation complete");
+      console.log("✅ [A2A-Router] Kelly calculation complete");
     } catch (e) {
-      console.error("Kelly calculation failed:", e);
+      console.error("❌ [A2A-Router] Kelly calculation failed:", e);
     }
   }
 
   // Consensus Agent
-  const consensusPrompt = `You are the CONSENSUS agent.
+  if (routingEnabled && tierAssignment) {
+    const consensusTier = tierAssignment.find(a => a.agent === 'consensus');
+    tierDistribution.consensus = consensusTier?.tier || 'COMPLEX';
+
+    console.log(`✨ [A2A-Router] Consensus routing: ${getTierLabel(consensusTier?.tier || 'COMPLEX')} → ${consensusTier?.model || MODELS.consensus}`);
+
+    const consensusModel = consensusTier?.model || MODELS.consensus;
+    const consensusTierPrompt = createTierPrompt(consensusTier?.tier || 'COMPLEX', 'Consensus agent');
+
+    results.consensus = await callModel(
+      consensusModel,
+      [
+        ...messages,
+        { role: "assistant", content: results.proposer },
+        { role: "assistant", content: results.critic }
+      ],
+      consensusTierPrompt
+    );
+  } else {
+    const consensusResponse = await callModel(
+      MODELS.consensus,
+      [
+        ...messages,
+        { role: "assistant", content: results.proposer },
+        { role: "assistant", content: results.critic }
+      ],
+      `You are the CONSENSUS agent.
 ${currentPrice ? `**Current price: $${currentPrice.toLocaleString()}**` : ''}
 ${kellyCalculation ? `**Kelly recommends: ${kellyCalculation.half_kelly}% position (Half Kelly)**` : ''}
 
@@ -344,35 +458,64 @@ Format your response with:
 - ADJUSTED STOP: (stop loss)
 - POSITION SIZE: (% of portfolio)
 - CONFIDENCE: (HIGH/MEDIUM/LOW)
-- SUMMARY: (concise rationale)`;
+- SUMMARY: (concise rationale)`
+    );
+    results.consensus = consensusResponse;
+  }
 
-  const consensusMessages = [
-    ...messages,
-    { role: "assistant", content: proposerResponse },
-    { role: "assistant", content: criticResponse }
-  ];
-  
-  const consensusResponse = await callModel(MODELS.consensus, consensusMessages, consensusPrompt);
   session.messages.push({
     role: "assistant",
-    content: consensusResponse,
+    content: results.consensus,
     agent: "consensus",
     timestamp: new Date().toISOString(),
     scriptData: kellyCalculation
   });
-  
+
+  // Save tier distribution and cost metrics
+  session.tierDistribution = tierDistribution;
+  session.routingEnabled = routingEnabled;
+  const isComplex = Object.values(tierDistribution).some(t => t === 'COMPLEX' || t === 'REASONING');
+
+  if (routingEnabled) {
+    const costEstimate = estimateDebateCost(tierDistribution, isComplex);
+    session.estimatedCost = costEstimate.estimatedCost;
+    console.log(`💰 [A2A-Router] Estimated cost: $${costEstimate.estimatedCost.toFixed(4)}`);
+    console.log(`⚡ [A2A-Router] Execution time: ${(Date.now() - startTime) / 1000}s`);
+  }
+
   saveSessions(debateSessions);
 
+  console.log(`✅ [A2A-Router] Debate complete!`);
+
   return {
-    proposer: proposerResponse,
-    critic: criticResponse,
-    consensus: consensusResponse,
+    proposer: results.proposer,
+    critic: results.critic,
+    consensus: results.consensus,
     scriptResults: {
       marketAnalysis,
       confidenceScore,
       kellyCalculation
-    }
+    },
+    tierDistribution,
+    routingEnabled
   };
+}
+
+function createTierPrompt(tier: string, agentRole: string): string {
+  const tiers = {
+    SIMPLE: "Provide a quick signal. No detailed analysis. Short response (<100 words).",
+    MEDIUM: "Analyze with moderate depth. Include rationale and basic risk assessment.",
+    COMPLEX: "Provide comprehensive analysis with technical indicators, entry/exit levels, and multi-step reasoning.",
+    REASONING: "Deep mathematical validation. Include multiple calculation steps. Formal reasoning."
+  };
+
+  const agentDesc = {
+    proposer: "Initial signal builder",
+    critic: "Critical reviewer",
+    consensus: "Final synthesizer"
+  };
+
+  return `${tiers[tier as keyof typeof tiers]}\n\nRole: ${agentRole} in a trading analysis debate.`;
 }
 
 async function continueDebate(debateId: string, message: string, useScripts: boolean = true) {
