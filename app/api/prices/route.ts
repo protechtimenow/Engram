@@ -4,36 +4,67 @@ import { NextRequest, NextResponse } from "next/server";
 const priceCache = new Map<string, { price: number; timestamp: number }>();
 const CACHE_TTL = 5000; // 5 seconds cache TTL
 
-interface BinancePrice {
-  symbol: string;
-  price: string;
+interface CoinGeckoPrice {
+  [key: string]: {
+    usd: number;
+    usd_24h_change?: number;
+  };
 }
 
-async function fetchPriceFromBinance(symbol: string): Promise<number | null> {
+// Map Binance symbols to CoinGecko IDs
+const SYMBOL_MAP: Record<string, string> = {
+  'BTCUSDT': 'bitcoin',
+  'ETHUSDT': 'ethereum',
+  'SOLUSDT': 'solana',
+  'ADAUSDT': 'cardano',
+  'DOTUSDT': 'polkadot',
+  'LINKUSDT': 'chainlink',
+  'MATICUSDT': 'matic-network',
+  'AVAXUSDT': 'avalanche-2',
+  'ATOMUSDT': 'cosmos',
+  'UNIUSDT': 'uniswap',
+};
+
+function getCoinGeckoId(symbol: string): string | null {
+  // Remove USDT suffix and look up
+  const baseSymbol = symbol.replace('USDT', '');
+  const id = SYMBOL_MAP[symbol] || SYMBOL_MAP[`${baseSymbol}USDT`];
+  return id;
+}
+
+async function fetchPriceFromCoinGecko(symbol: string): Promise<number | null> {
   // Check cache first
   const cached = priceCache.get(symbol);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     return cached.price;
   }
 
+  const coinId = getCoinGeckoId(symbol);
+  if (!coinId) {
+    console.error(`Unknown symbol: ${symbol}`);
+    return null;
+  }
+
   try {
-    // Call Binance API directly
-    const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`, {
-      headers: {
-        'Accept': 'application/json',
-      },
-    });
+    // Call CoinGecko API (free, no auth required)
+    const response = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd&include_24hr_change=true`,
+      {
+        headers: { 'Accept': 'application/json' },
+        next: { revalidate: 0 }
+      }
+    );
 
     if (!response.ok) {
-      console.error(`Binance API error for ${symbol}: ${response.status}`);
+      console.error(`CoinGecko API error for ${symbol}: ${response.status}`);
       return null;
     }
 
-    const data: BinancePrice = await response.json();
-    const price = parseFloat(data.price);
+    const data: CoinGeckoPrice = await response.json();
+    const price = data[coinId]?.usd;
 
-    if (isNaN(price)) {
-      console.error(`Invalid price for ${symbol}: ${data.price}`);
+    if (!price || isNaN(price)) {
+      console.error(`Invalid price for ${symbol}: ${price}`);
       return null;
     }
 
@@ -64,10 +95,11 @@ export async function GET(request: NextRequest) {
 
     // Fetch all prices in parallel
     const pricePromises = symbolList.map(async (symbol) => {
-      const price = await fetchPriceFromBinance(symbol);
+      const price = await fetchPriceFromCoinGecko(symbol);
       results[symbol] = {
         price,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        error: price === null ? 'Failed to fetch price' : undefined
       };
     });
 
@@ -104,10 +136,11 @@ export async function POST(request: NextRequest) {
 
     // Fetch all prices in parallel
     const pricePromises = symbols.map(async (symbol: string) => {
-      const price = await fetchPriceFromBinance(symbol.toUpperCase());
+      const price = await fetchPriceFromCoinGecko(symbol.toUpperCase());
       results[symbol] = {
         price,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        error: price === null ? 'Failed to fetch price' : undefined
       };
     });
 
