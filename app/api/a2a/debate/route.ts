@@ -279,7 +279,8 @@ async function runDebate(debateId: string, topic: string, context?: string, useS
     try {
       marketAnalysis = await runPythonScript("analyze_market.py", [
         "--pair", session.extractedPair,
-        "--output", "json"
+        "--output", "json",
+        "--live-data"
       ]);
       session.scriptResults!.marketAnalysis = marketAnalysis;
       console.log("Market analysis complete");
