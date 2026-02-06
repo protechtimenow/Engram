@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as path from "path";
 import * as fs from "fs";
-import { analyzeMarket } from "../lib/marketAnalyzer";
-import { scoreConfidence } from "../lib/confidenceScorer";
-import { calculateKelly } from "../lib/kellyCalculator";
+import { analyzeMarket } from "../../lib/marketAnalyzer";
+import { scoreConfidence } from "../../lib/confidenceScorer";
+import { calculateKelly } from "../../lib/kellyCalculator";
 
 // File-based session storage
 const SESSIONS_FILE = path.join(process.cwd(), "a2a_sessions.json");
