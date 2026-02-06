@@ -242,10 +242,16 @@ export default function DashboardPage() {
   }
 
   const executeTrade = (debate: DebateTrade) => {
+    // Skip NEUTRAL signals - can't execute a neutral position
+    if (debate.signal === "NEUTRAL") {
+      alert("Cannot execute NEUTRAL signal. Only LONG or SHORT positions can be created.")
+      return
+    }
+    
     const newPosition: Position = {
       id: Date.now().toString(),
       asset: debate.asset,
-      type: debate.signal,
+      type: debate.signal, // Now guaranteed to be "LONG" | "SHORT"
       entryPrice: debate.entry,
       currentPrice: debate.entry, // Would fetch real price
       size: debate.position / 100, // Convert % to size
