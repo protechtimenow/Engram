@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Cache for price data (5 second TTL)
-const priceCache = new Map<string, { price: number; timestamp: number }>();
-const CACHE_TTL = 5000; // 5 seconds cache TTL
+// Extended cache to reduce API calls (60 seconds)
+const priceCache = new Map<string, { price: number; timestamp: number; source: string }>();
+const CACHE_TTL = 60000; // 60 seconds
+const REQUEST_TRACKER: { count: number; resetTime: number } = { count: 0, resetTime: 0 };
+const MAX_REQUESTS_PER_MINUTE = 25; // CoinGecko free limit is ~30
 
 interface CoinGeckoPrice {
   [key: string]: {
@@ -11,7 +13,7 @@ interface CoinGeckoPrice {
   };
 }
 
-// Map Binance symbols to CoinGecko IDs
+// Map symbols to CoinGecko IDs
 const SYMBOL_MAP: Record<string, string> = {
   'BTCUSDT': 'bitcoin',
   'ETHUSDT': 'ethereum',
@@ -25,18 +27,40 @@ const SYMBOL_MAP: Record<string, string> = {
   'UNIUSDT': 'uniswap',
 };
 
+// Fallback/mock prices when API is rate limited
+const FALLBACK_PRICES: Record<string, number> = {
+  'BTCUSDT': 96500,
+  'ETHUSDT': 2750,
+  'SOLUSDT': 198,
+  'ADAUSDT': 0.95,
+  'DOTUSDT': 6.5,
+  'LINKUSDT': 19.5,
+  'MATICUSDT': 0.42,
+  'AVAXUSDT': 35,
+  'ATOMUSDT': 4.5,
+  'UNIUSDT': 8.5,
+};
+
 function getCoinGeckoId(symbol: string): string | null {
-  // Remove USDT suffix and look up
-  const baseSymbol = symbol.replace('USDT', '');
-  const id = SYMBOL_MAP[symbol] || SYMBOL_MAP[`${baseSymbol}USDT`];
-  return id;
+  return SYMBOL_MAP[symbol] || null;
 }
 
-async function fetchPriceFromCoinGecko(symbol: string): Promise<number | null> {
+function checkRateLimit(): boolean {
+  const now = Date.now();
+  if (now > REQUEST_TRACKER.resetTime) {
+    // Reset counter every minute
+    REQUEST_TRACKER.count = 0;
+    REQUEST_TRACKER.resetTime = now + 60000;
+  }
+  REQUEST_TRACKER.count++;
+  return REQUEST_TRACKER.count <= MAX_REQUESTS_PER_MINUTE;
+}
+
+async function fetchPriceFromCoinGecko(symbol: string): Promise<{ price: number; source: string } | null> {
   // Check cache first
   const cached = priceCache.get(symbol);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return cached.price;
+    return { price: cached.price, source: 'cache' };
   }
 
   const coinId = getCoinGeckoId(symbol);
@@ -45,18 +69,40 @@ async function fetchPriceFromCoinGecko(symbol: string): Promise<number | null> {
     return null;
   }
 
+  // Check rate limit
+  if (!checkRateLimit()) {
+    console.warn(`Rate limit reached, using fallback for ${symbol}`);
+    const fallbackPrice = FALLBACK_PRICES[symbol];
+    if (fallbackPrice) {
+      return { price: fallbackPrice, source: 'fallback' };
+    }
+    return null;
+  }
+
   try {
-    // Call CoinGecko API (free, no auth required)
     const response = await fetch(
-      `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd&include_24hr_change=true`,
+      `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd`,
       {
         headers: { 'Accept': 'application/json' },
         next: { revalidate: 0 }
       }
     );
 
+    if (response.status === 429) {
+      console.warn(`CoinGecko rate limit (429) for ${symbol}, using fallback`);
+      const fallbackPrice = FALLBACK_PRICES[symbol];
+      if (fallbackPrice) {
+        return { price: fallbackPrice, source: 'fallback' };
+      }
+      return null;
+    }
+
     if (!response.ok) {
       console.error(`CoinGecko API error for ${symbol}: ${response.status}`);
+      const fallbackPrice = FALLBACK_PRICES[symbol];
+      if (fallbackPrice) {
+        return { price: fallbackPrice, source: 'fallback' };
+      }
       return null;
     }
 
@@ -69,11 +115,15 @@ async function fetchPriceFromCoinGecko(symbol: string): Promise<number | null> {
     }
 
     // Update cache
-    priceCache.set(symbol, { price, timestamp: Date.now() });
+    priceCache.set(symbol, { price, timestamp: Date.now(), source: 'coingecko' });
     
-    return price;
+    return { price, source: 'coingecko' };
   } catch (error) {
     console.error(`Failed to fetch price for ${symbol}:`, error);
+    const fallbackPrice = FALLBACK_PRICES[symbol];
+    if (fallbackPrice) {
+      return { price: fallbackPrice, source: 'fallback' };
+    }
     return null;
   }
 }
@@ -91,15 +141,16 @@ export async function GET(request: NextRequest) {
     }
 
     const symbolList = symbols.split(',').map(s => s.trim().toUpperCase());
-    const results: Record<string, { price: number | null; timestamp: number; error?: string }> = {};
+    const results: Record<string, { price: number | null; timestamp: number; source: string; error?: string }> = {};
 
     // Fetch all prices in parallel
     const pricePromises = symbolList.map(async (symbol) => {
-      const price = await fetchPriceFromCoinGecko(symbol);
+      const result = await fetchPriceFromCoinGecko(symbol);
       results[symbol] = {
-        price,
+        price: result?.price || null,
         timestamp: Date.now(),
-        error: price === null ? 'Failed to fetch price' : undefined
+        source: result?.source || 'error',
+        error: result === null ? 'Failed to fetch price' : undefined
       };
     });
 
@@ -132,15 +183,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const results: Record<string, { price: number | null; timestamp: number; error?: string }> = {};
+    const results: Record<string, { price: number | null; timestamp: number; source: string; error?: string }> = {};
 
     // Fetch all prices in parallel
     const pricePromises = symbols.map(async (symbol: string) => {
-      const price = await fetchPriceFromCoinGecko(symbol.toUpperCase());
+      const result = await fetchPriceFromCoinGecko(symbol.toUpperCase());
       results[symbol] = {
-        price,
+        price: result?.price || null,
         timestamp: Date.now(),
-        error: price === null ? 'Failed to fetch price' : undefined
+        source: result?.source || 'error',
+        error: result === null ? 'Failed to fetch price' : undefined
       };
     });
 
