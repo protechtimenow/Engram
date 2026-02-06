@@ -48,7 +48,7 @@ function Sidebar({
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2.5 text-sm text-foreground">
             <span className="inline-block h-2 w-2 rounded-full bg-primary shadow-[0_0_10px_hsl(var(--primary))]" />
-            Local Engram Model
+            OpenRouter API
           </div>
           <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2.5 text-sm text-foreground">
             <span className="inline-block h-2 w-2 rounded-full bg-primary shadow-[0_0_10px_hsl(var(--primary))]" />
@@ -66,10 +66,10 @@ function Sidebar({
           onChange={(e) => onModelChange(e.target.value)}
           className="w-full cursor-pointer rounded-xl border border-border bg-muted/30 px-3 py-2.5 font-sans text-sm text-foreground outline-none focus:border-primary"
         >
-          <option value="liquid/lfm2.5-1.2b">
-            Liquid LFM 2.5 (1.2b) [Local]
+          <option value="glm-4.7-flash">
+            GLM 4.7 Flash (OpenRouter)
           </option>
-          <option value="glm-4.7-flash">GLM 4.7 Flash [Remote/Local]</option>
+          <option value="liquid/lfm-40b">Liquid LFM 40B (OpenRouter)</option>
           <option value="custom">{"Custom Engine..."}</option>
         </select>
       </div>
@@ -250,7 +250,7 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const [selectedModel, setSelectedModel] = useState("liquid/lfm2.5-1.2b")
+  const [selectedModel, setSelectedModel] = useState("glm-4.7-flash")
   const [terminalVisible, setTerminalVisible] = useState(false)
   const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([
     { text: "opencode init --project Engram", type: "cmd" },
@@ -307,11 +307,17 @@ export default function Home() {
 
     const allMessages = [...messages, userMessage]
     try {
-      const response = await fetch("/v1/chat/completions", {
+      // Use OpenRouter API instead of LM Studio
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": "Bearer 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",
+          "HTTP-Referer": "http://localhost:3000",
+          "X-Title": "Engram Hub"
+        },
         body: JSON.stringify({
-          model: selectedModel,
+          model: selectedModel === "glm-4.7-flash" ? "z-ai/glm-4.7-flash" : "liquid/lfm-40b",
           messages: allMessages,
           max_tokens: 1000,
         }),
@@ -320,7 +326,7 @@ export default function Home() {
       if (response.ok && data.choices?.[0]) {
         setMessages((prev) => [...prev, { role: "assistant", content: data.choices[0].message.content }])
       } else {
-        throw new Error(data.detail || data.error?.message || "Unknown AI server error")
+        throw new Error(data.error?.message || "Unknown AI server error")
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "Unknown error"
@@ -328,7 +334,7 @@ export default function Home() {
         ...prev,
         {
           role: "assistant",
-          content: `**Connection Error:** ${errorMsg}\n\nTroubleshooting:\n1. Is **${selectedModel}** loaded in LM Studio?\n2. Is the LM Studio server running on port 1234?\n3. Try switching the model in the sidebar.`,
+          content: `**Connection Error:** ${errorMsg}\n\nTroubleshooting:\n1. Check your OpenRouter API key\n2. Verify internet connection\n3. Try switching the model in the sidebar.`,
         },
       ])
     } finally {
