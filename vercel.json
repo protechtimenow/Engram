@@ -3,10 +3,6 @@
   "outputDirectory": ".next",
   "framework": "nextjs",
   "installCommand": "npm install",
-  "env": {
-    "OPENROUTER_API_KEY": "@openrouter-api-key",
-    "NEXT_PUBLIC_APP_URL": "@app-url"
-  },
   "regions": ["iad1"],
   "headers": [
     {
