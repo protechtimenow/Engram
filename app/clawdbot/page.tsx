@@ -76,7 +76,7 @@ export default function ClawdBotPage() {
                 id: "gateway-client",
                 displayName: "Engram Web Hub",
                 version: "1.0.0",
-                platform: "javascript",
+                platform: "python",
                 mode: "backend"
               },
               caps: ["chat"],
@@ -194,10 +194,8 @@ export default function ClawdBotPage() {
       method: "chat.send",
       params: {
         message: message,
-        context: {
-          source: "web",
-          timestamp: new Date().toISOString()
-        }
+        sessionKey: "web-session-" + Math.random().toString(36).substring(2, 10),
+        idempotencyKey: Math.random().toString(36).substring(2) + Date.now().toString(36)
       }
     }
     console.log("Sending message:", chatMsg)
