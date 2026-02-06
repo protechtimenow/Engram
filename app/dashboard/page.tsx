@@ -68,6 +68,8 @@ export default function DashboardPage() {
     portfolioHeat: 0
   })
   const [isLoading, setIsLoading] = useState(true)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [isUpdating, setIsUpdating] = useState(false)
 
   // Load data from localStorage
   useEffect(() => {
@@ -162,6 +164,73 @@ export default function DashboardPage() {
       portfolioHeat
     })
   }, [positions])
+
+  // Fetch live prices for open positions
+  const fetchLivePrices = async () => {
+    const openPositions = positions.filter(p => p.status === "OPEN")
+    if (openPositions.length === 0) return
+
+    setIsUpdating(true)
+    try {
+      // Get unique symbols
+      const symbols = [...new Set(openPositions.map(p => p.asset.replace('/', '')))]
+      
+      const response = await fetch(`/api/prices?symbols=${symbols.join(',')}`)
+      const data = await response.json()
+
+      if (data.success) {
+        // Update positions with new prices
+        setPositions(prev => {
+          const updated = prev.map(position => {
+            if (position.status !== "OPEN") return position
+            
+            const symbol = position.asset.replace('/', '')
+            const priceData = data.data[symbol]
+            
+            if (priceData?.price) {
+              const currentPrice = priceData.price
+              const priceDiff = currentPrice - position.entryPrice
+              const pnl = position.type === "LONG" 
+                ? priceDiff * position.size 
+                : -priceDiff * position.size
+              const pnlPercent = (pnl / (position.entryPrice * position.size)) * 100
+              
+              return {
+                ...position,
+                currentPrice,
+                pnl,
+                pnlPercent
+              }
+            }
+            return position
+          })
+          
+          // Save to localStorage
+          localStorage.setItem('trading_positions', JSON.stringify(updated))
+          return updated
+        })
+        
+        setLastUpdated(new Date())
+      }
+    } catch (error) {
+      console.error('Failed to fetch live prices:', error)
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  // Poll for price updates every 10 seconds
+  useEffect(() => {
+    if (positions.filter(p => p.status === "OPEN").length === 0) return
+
+    // Initial fetch
+    fetchLivePrices()
+
+    // Set up polling
+    const interval = setInterval(fetchLivePrices, 10000) // 10 seconds
+
+    return () => clearInterval(interval)
+  }, [positions.length]) // Re-run when positions change
 
   const closePosition = (id: string) => {
     setPositions(prev => prev.map(p => 
@@ -274,12 +343,21 @@ export default function DashboardPage() {
                   <Activity className="h-4 w-4 text-green-400" />
                   Active Positions
                 </h2>
-                <button 
-                  onClick={() => window.location.reload()}
-                  className="rounded p-1 text-gray-500 hover:bg-gray-800 hover:text-gray-300"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                </button>
+                <div className="flex items-center gap-3">
+                  {lastUpdated && (
+                    <span className="text-xs text-gray-500">
+                      Updated: {lastUpdated.toLocaleTimeString()}
+                      {isUpdating && <span className="ml-1 text-green-400">...</span>}
+                    </span>
+                  )}
+                  <button 
+                    onClick={fetchLivePrices}
+                    disabled={isUpdating}
+                    className="rounded p-1 text-gray-500 hover:bg-gray-800 hover:text-gray-300 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${isUpdating ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
               </div>
               
               <div className="overflow-x-auto">
