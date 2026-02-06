@@ -201,7 +201,7 @@ export async function POST(request: NextRequest) {
         messages: [],
         status: "active",
         createdAt: new Date().toISOString(),
-        extractedPair,
+        extractedPair: extractedPair || undefined,
         scriptResults: {}
       };
       debateSessions.set(id, session);
