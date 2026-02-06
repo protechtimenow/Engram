@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useCallback, useRef, type KeyboardEvent, type ChangeEvent } from "react"
-import { Send } from "lucide-react"
+import { Send, Bot } from "lucide-react"
+import Link from "next/link"
 import { ChatMessages, type Message } from "../components/chat-messages"
 import { TerminalPanel, type TerminalLine } from "../components/terminal-panel"
 
@@ -70,6 +71,19 @@ function Sidebar({
             Scanning codebase...
           </div>
         </div>
+      </div>
+
+      <div className="mb-6">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+          Integrations
+        </p>
+        <Link
+          href="/clawdbot"
+          className="flex items-center gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2.5 text-sm text-foreground transition-colors hover:border-primary"
+        >
+          <Bot className="h-4 w-4 text-primary" />
+          ClawdBot (WebSocket)
+        </Link>
       </div>
 
       <div className="mt-auto">
