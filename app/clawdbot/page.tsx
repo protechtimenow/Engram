@@ -67,7 +67,7 @@ export default function ClawdBotPage() {
           // Send authentication
           const authMsg = {
             type: "req",
-            id: crypto.randomUUID(),
+            id: Math.random().toString(36).substring(2) + Date.now().toString(36),
             method: "connect",
             params: {
               minProtocol: 3,
@@ -76,8 +76,8 @@ export default function ClawdBotPage() {
                 id: "gateway-client",
                 displayName: "Engram Web Hub",
                 version: "1.0.0",
-                platform: "web",
-                mode: "operator"
+                platform: "javascript",
+                mode: "backend"
               },
               caps: ["chat"],
               auth: {
@@ -100,7 +100,7 @@ export default function ClawdBotPage() {
             timestamp: new Date().toLocaleTimeString()
           }])
         } else if (data.type === "res" && data.ok === false) {
-          console.error("Authentication failed:", data)
+          console.error("Authentication failed:", JSON.stringify(data, null, 2))
           setConnectionStatus("Auth Failed")
           setIsConnecting(false)
           isConnectingRef.current = false
@@ -190,7 +190,7 @@ export default function ClawdBotPage() {
     // Send to ClawdBot
     const chatMsg = {
       type: "req",
-      id: crypto.randomUUID(),
+      id: Math.random().toString(36).substring(2) + Date.now().toString(36),
       method: "chat.send",
       params: {
         message: message,
