@@ -69,7 +69,7 @@ function Sidebar({
           <option value="glm-4.7-flash">
             GLM 4.7 Flash (OpenRouter)
           </option>
-          <option value="liquid/lfm-40b">Liquid LFM 40B (OpenRouter)</option>
+          <option value="openai/gpt-4o-mini">GPT-4o Mini (OpenRouter)</option>
           <option value="custom">{"Custom Engine..."}</option>
         </select>
       </div>
@@ -317,7 +317,7 @@ export default function Home() {
           "X-Title": "Engram Hub"
         },
         body: JSON.stringify({
-          model: selectedModel === "glm-4.7-flash" ? "z-ai/glm-4.7-flash" : "liquid/lfm-40b",
+          model: selectedModel === "glm-4.7-flash" ? "z-ai/glm-4.7-flash" : "openai/gpt-4o-mini",
           messages: allMessages,
           max_tokens: 1000,
         }),
