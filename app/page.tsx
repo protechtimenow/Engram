@@ -153,7 +153,7 @@ function TerminalPanel({
   if (!visible) return null
 
   return (
-    <div className="h-48 overflow-y-auto border-t border-border bg-black p-4 font-mono text-sm">
+    <div className="h-48 overflow-y-auto border-t border-border bg-[hsl(0,0%,2%)] p-4 font-mono text-sm">
       {lines.map((line, i) => (
         <div
           key={i}
@@ -227,11 +227,11 @@ function ChatInput({
 function formatContent(content: string): string {
   return content
     .replace(/```(\w*)\n([\s\S]*?)```/g, (_match, _lang, code) => {
-      return `<pre class="my-2 overflow-x-auto rounded-lg border border-[hsl(var(--border))] bg-black/30 p-3"><code class="font-mono text-sm">${escapeHtml(code)}</code></pre>`
+      return `<pre class="my-2 overflow-x-auto rounded-lg border border-[hsl(var(--border))] bg-[rgba(0,0,0,0.3)] p-3"><code class="font-mono text-sm">${escapeHtml(code)}</code></pre>`
     })
     .replace(
       /`([^`]+)`/g,
-      '<code class="rounded bg-white/10 px-1.5 py-0.5 font-mono text-sm">$1</code>'
+      '<code class="rounded bg-[rgba(255,255,255,0.1)] px-1.5 py-0.5 font-mono text-sm">$1</code>'
     )
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/\n/g, "<br/>")
@@ -245,7 +245,7 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;")
 }
 
-/* ───── Main Page ───── */
+/* ───── Main Page Component ───── */
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
