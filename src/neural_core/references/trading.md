@@ -1,109 +1,69 @@
-# Trading Domain (Neural Core)
+# Trading Domain Reference
 
-Use engram scripts for trading analysis. This reference file provides domain-specific guidance for trading queries.
+## Core Principles
 
-## Available Scripts
+1. **Risk Management First**: Position sizing > Entry timing
+2. **Edge Validation**: Every trade needs statistical edge
+3. **Asymmetric Returns**: Seek positive risk/reward (minimum 1:2)
+4. **Market Context**: Macro conditions affect all technicals
 
-### 1. Market Analysis
-```bash
-python scripts/analyze_market.py --pair [BTC/USD] --timeframe [1h]
+## Analysis Framework
+
+### Technical Analysis
+- **Trend**: Identify primary trend (higher timeframe)
+- **Support/Resistance**: Key levels from price action
+- **Momentum**: RSI, MACD, volume confirmation
+- **Patterns**: Breakouts, reversals, continuations
+
+### Risk Assessment
+- **Position Size**: Kelly criterion or fixed fraction
+- **Stop Loss**: Technical level, not arbitrary %
+- **Portfolio Heat**: Max 2% risk per trade, 6% total
+- **Correlation**: Avoid correlated positions
+
+### Signal Generation
 ```
+LONG Signal Requirements:
+- Trend alignment (bullish)
+- Support hold / resistance break
+- Volume confirmation
+- Risk/reward >= 1:2
+- Kelly fraction > 0
 
-Parameters:
-- `--pair`: Trading pair (e.g., BTC/USD, EUR/USD, AAPL)
-- `--timeframe`: Analysis timeframe (1m, 5m, 15m, 1h, 4h, 1d)
-
-Returns: Technical analysis, support/resistance levels, trend direction
-
-### 2. Signal Generation
-```bash
-python scripts/generate_signal.py --pair [EUR/USD] --context [bullish trend]
+SHORT Signal Requirements:
+- Trend alignment (bearish)
+- Resistance hold / support break
+- Volume confirmation
+- Risk/reward >= 1:2
+- Kelly fraction > 0
 ```
-
-Parameters:
-- `--pair`: Trading pair
-- `--context`: Additional market context (optional)
-
-Returns: BUY/SELL/HOLD signal with confidence score and reasoning
-
-### 3. Risk Assessment
-```bash
-python scripts/assess_risk.py --pair [BTC/USD] --position-size [1000]
-```
-
-Parameters:
-- `--pair`: Trading pair
-- `--position-size`: Position size in USD (default: 1000)
-
-Returns: Risk level (LOW/MEDIUM/HIGH) with recommendations
 
 ## Output Format
 
-All trading analysis returns structured JSON:
+All trading analysis should include:
 
-```json
-{
-  "domain": "trading",
-  "signal": "BUY/SELL/HOLD",
-  "confidence": 0.XX,
-  "timeframe": "1h",
-  "risk_level": "LOW/MEDIUM/HIGH",
-  "analysis": "Technical and fundamental analysis text",
-  "suggestions": [
-    "Actionable suggestion 1",
-    "Actionable suggestion 2",
-    "Actionable suggestion 3"
-  ],
-  "reasoning": [
-    {"step": "...", "evidence": "..."}
-  ],
-  "next_steps": ["...", "..."]
-}
+```
+SIGNAL: (LONG/SHORT/NEUTRAL)
+CONFIDENCE: (0-100%)
+ENTRY: (price level with rationale)
+TARGET: (price level with R:R ratio)
+STOP: (price level with technical basis)
+POSITION: (% of portfolio with Kelly calc)
+RATIONALE: (technical + fundamental)
+RISKS: (specific concerns)
 ```
 
-## Calibration Guidelines
+## Common Biases to Check
 
-### Position Sizing (Kelly Criterion)
-Use Kelly criterion for optimal position sizing:
-- f* = (bp - q) / b
-- Where: b = odds, p = win probability, q = loss probability (1-p)
-- Never risk more than 2-5% of portfolio on single trade
+- **Confirmation**: Seeking only bullish signals in uptrend
+- **Recency**: Overweighting recent price action
+- **Anchoring**: Fixating on entry price
+- **Overconfidence**: Ignoring risk after wins
 
-### Risk Management
-- Always use stop-losses
-- Account for correlation across markets
-- Apply Bayesian updating when new data arrives
-- Include maximum drawdown limits
+## Risk Management Rules
 
-### Confidence Calibration
-- 90%+ confidence: High conviction, larger position size
-- 70-90% confidence: Moderate conviction, standard position
-- 50-70% confidence: Low conviction, reduced position or skip
-- <50% confidence: No trade, wait for better setup
-
-### Market Context Factors
-Consider these factors in analysis:
-- Macro trends (bull/bear market)
-- Volatility regime (high/low volatility)
-- Correlation with other assets
-- News and event risks
-- Liquidity conditions
-
-## Risk Warnings
-
-**Always include these warnings in trading advice:**
-
-1. Past performance does not guarantee future results
-2. Trading involves substantial risk of loss
-3. Never trade with money you cannot afford to lose
-4. This analysis is for informational purposes only, not financial advice
-5. Always do your own research and consult a financial advisor
-
-## Workflow
-
-1. **Detect trading query** → User mentions trading pair or asks for market analysis
-2. **Determine analysis type** → Market analysis, signal, or risk assessment
-3. **Select appropriate script** → Run corresponding engram script
-4. **Parse JSON output** → Extract signal, confidence, risk level
-5. **Add risk warnings** → Include mandatory risk disclaimers
-6. **Present results** → Format for user with actionable suggestions
+1. Never risk >2% per trade
+2. Never risk >6% portfolio at once
+3. Use Kelly/2 for position sizing
+4. Correlation check before adding positions
+5. Pre-define exit before entry

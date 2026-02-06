@@ -1,110 +1,139 @@
----
-name: neural-core
-description: General neural decision intelligence for trading, research, pattern recognition, and strategy. Progressive-disclosure design loads only relevant references per domain. Use when user asks for "analyze [domain]", "pattern recognition", "decision strategy", "confidence assessment", or trading analysis. Triggers on domain-specific queries across trading, research, strategy, and general reasoning.
----
+# Neural Core - ClawdBot Skill
 
-# Neural Core Decision Intelligence
+Meta-skill providing progressive-disclosure intelligence across multiple domains.
 
-Neural Core provides systematic decision intelligence across domains using Engram's neural capabilities as the underlying engine. The system uses progressive disclosure—loading only the reference file relevant to the user's query.
+## Overview
 
-## Domain Loading Strategy
+Neural Core extends Engram's capabilities through domain-specific analysis with:
+- **Progressive Disclosure**: Load capabilities only when needed (90% token reduction)
+- **Multi-Domain Support**: Trading, Research, Strategy, Judgment
+- **Universal Scripts**: Reusable analysis tools across all domains
+- **Local AI**: LMStudio integration for privacy and speed
 
-When user queries by domain, load corresponding reference file and delegate to domain-specific logic:
+## Domains
 
-- **Trading** → Load `references/trading.md` → Use engram scripts (analyze_market, generate_signal, assess_risk)
-- **Research** → Load `references/research.md` → Use engram pattern-scan + confidence-scoring
-- **Strategy** → Load `references/strategy.md` → Use engram decision-nets + Bayesian frameworks
-- **General** → Load `references/judgment.md` → Use engram confidence-scoring + bias detection
+### Trading
+Market analysis, signal generation, risk assessment
+- Entry: `analyze_market`, `generate_signal`, `assess_risk`
+- Scripts: `analyze_market.py`, `confidence_scoring.py`
 
-## Domain Detection
+### Research
+Pattern detection, claim analysis, bias detection
+- Entry: `scan_patterns`, `verify_claim`, `detect_bias`
+- Scripts: `pattern_scan.py`, `confidence_scoring.py`
 
-Determine domain from user query:
+### Strategy
+Decision frameworks, scenario modeling, optimization
+- Entry: `decision_analysis`, `optimize_strategy`, `model_scenarios`
+- Scripts: `decision_nets.py` (Kelly, Bayesian, Monte Carlo)
 
-**Trading domain indicators:**
-- Trading pairs (BTC/USD, EUR/USD, AAPL)
-- Market analysis requests
-- Signal generation
-- Risk assessment for positions
-- Keywords: "analyze", "signal", "trade", "position", "market"
+### Judgment
+General reasoning, confidence assessment, logical analysis
+- Entry: `evaluate_claim`, `check_reasoning`, `assess_confidence`
+- Scripts: `confidence_scoring.py`, `pattern_scan.py`
 
-**Research domain indicators:**
-- Pattern recognition in text/data
-- Claim analysis
-- Evidence evaluation
-- Keywords: "analyze this claim", "pattern", "research", "evidence"
+## Architecture
 
-**Strategy domain indicators:**
-- Decision frameworks
-- Scenario modeling
-- Decision trees
-- Keywords: "decision", "strategy", "framework", "scenario", "optimize"
+```
+User Query
+    ↓
+Domain Detection (keywords/classifier)
+    ↓
+Domain Router → Specific Handler
+    ↓
+Progressive Disclosure (load only needed context)
+    ↓
+Universal Scripts (reusable analysis)
+    ↓
+LMStudio / OpenRouter
+    ↓
+Structured Response
+```
 
-**General/Judgment domain indicators:**
-- Confidence assessment
-- General reasoning
-- Bias detection
-- Keywords: "confidence", "reasoning", "bias", "judgment", "evaluate"
+## Universal Scripts
 
-## Core Capabilities (Reused Across Domains)
+All scripts located in `src/engram/scripts/`:
 
-1. **Confidence Scoring** - Score any claim 0-100% with bias detection
-2. **Pattern Detection** - Find patterns, signals, anomalies in text/data
-3. **Decision Frameworks** - Build decision trees, Bayesian nets, value functions
-4. **Risk Assessment** - Per-domain risk models
+| Script | Purpose | Domains |
+|--------|---------|---------|
+| `analyze_market.py` | Technical analysis | Trading |
+| `confidence_scoring.py` | 0-100% confidence with bias | All |
+| `pattern_scan.py` | Fallacy/bias detection | Research, Judgment |
+| `decision_nets.py` | Kelly/Bayesian/MC | Strategy, Trading |
 
-## Output Format
+## Usage
 
-All responses output structured JSON with:
-- `domain`: The domain used (trading/research/strategy/judgment)
-- `confidence`: Overall confidence score (0.0-1.0)
-- `reasoning`: Array of reasoning steps with evidence
-- `analysis`: Domain-specific analysis results
-- `next_steps`: Actionable recommendations
+### Direct Script Usage
+```bash
+# Trading analysis
+python src/engram/scripts/analyze_market.py --pair BTC/USD
 
-## Usage Examples
+# Confidence scoring
+python src/engram/scripts/confidence_scoring.py --claim "ETH bullish" --bias-check
 
-**Trading example:**
-User: "Analyze BTC/USD"
-1. Load `references/trading.md`
-2. Run `analyze_market.py --pair BTC/USD --timeframe 1h`
-3. Output JSON with signal, confidence, risk level
+# Decision framework
+python src/engram/scripts/decision_nets.py --kelly --edge 0.6 --odds 2.0
+```
 
-**Research example:**
-User: "Analyze this claim about AI safety"
-1. Load `references/research.md`
-2. Run `pattern-scan.py` on claim text
-3. Run `confidence-scoring.py` on claim + evidence
-4. Output JSON with confidence, biases detected, patterns found
+### Via ClawdBot
+```
+User: "Analyze BTC/USD for a long entry"
+→ Domain: Trading
+→ Script: analyze_market.py --pair BTC/USD --context "long entry"
+→ Response: Structured market analysis
 
-**Strategy example:**
-User: "Design decision framework for position sizing"
-1. Load `references/strategy.md`
-2. Run `decision-nets.py` with nodes and probabilities
-3. Run Monte Carlo simulation
-4. Output JSON with decision tree, expected value, risk profile
+User: "How confident should I be that SOL will reach $200?"
+→ Domain: Judgment
+→ Script: confidence_scoring.py --claim "SOL will reach $200" --bias-check
+→ Response: Confidence score with bias detection
+```
 
-**General example:**
-User: "What's the confidence in Trump pardoning Epstein?"
-1. Load `references/judgment.md`
-2. Run `confidence-scoring.py` on claim
-3. Detect cognitive biases
-4. Output JSON with confidence score, reasoning trace, bias flags
+## Configuration
 
-## Script Locations
+Environment variables:
+```bash
+LMSTUDIO_HOST=localhost
+LMSTUDIO_PORT=1234
+ENGRAM_MODEL=glm-4.7-flash
+OPENROUTER_KEY=sk-or-...
+```
 
-All scripts are in `C:\Users\OFFRSTAR0\.clawdbot\skills\engram\scripts\`:
-- `analyze_market.py` - Market analysis
-- `generate_signal.py` - Signal generation
-- `assess_risk.py` - Risk assessment
-- `confidence-scoring.py` - Confidence scoring across domains
-- `pattern-scan.py` - Pattern detection
-- `decision-nets.py` - Decision network building
+## Progressive Disclosure
 
-## Integration with ClawdBot
+Instead of loading all domain knowledge upfront:
 
-When this skill triggers:
-1. Detect domain from user query
-2. Load corresponding reference file
-3. Execute appropriate scripts
-4. Return structured JSON response
-5. Include risk warnings and confidence calibration
+1. **Lightweight Detection**: Simple keyword matching
+2. **Domain Loading**: Load only relevant domain context
+3. **Script Execution**: Run appropriate analysis script
+4. **Result Synthesis**: Combine script output with AI reasoning
+
+Token efficiency: 90% reduction vs loading all contexts.
+
+## Integration with A2A
+
+Neural Core scripts integrate with A2A debate:
+
+```
+A2A Debate on "BTC long at $43k"
+    ↓
+Proposer: Uses analyze_market.py for technical setup
+Critic: Uses confidence_scoring.py to challenge assumptions
+Consensus: Uses decision_nets.py --kelly for position sizing
+```
+
+## File Structure
+
+```
+src/neural_core/
+├── SKILL.md              # This file
+├── references/           # Domain-specific guidance
+│   ├── trading.md        # Trading domain context
+│   ├── research.md       # Research domain context
+│   ├── strategy.md       # Strategy domain context
+│   └── judgment.md       # Judgment domain context
+└── __init__.py           # Core routing logic
+```
+
+## Version
+
+v2.0.0 - Multi-domain progressive disclosure

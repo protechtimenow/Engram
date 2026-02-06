@@ -1,257 +1,125 @@
-# General Judgment Domain (Neural Core)
+# Judgment Domain Reference
 
-Use engram for general reasoning, confidence assessment, and bias detection. This reference file provides domain-specific guidance for general judgment queries.
+## Core Principles
 
-## Available Scripts
+1. **Epistemic Humility**: Acknowledge what you don't know
+2. **Probabilistic Thinking**: Express confidence as probabilities
+3. **Updating**: Revise beliefs with new evidence
+4. **Diversity of Thought**: Seek multiple perspectives
 
-### 1. Claim Confidence Scoring
-```bash
-python scripts/confidence-scoring.py --claim "[claim]" --evidence "[evidence]"
+## Reasoning Quality
+
+### Logical Structure
+- **Premises**: Are the starting points valid?
+- **Inference**: Does conclusion follow from premises?
+- **Soundness**: Valid + true premises = sound argument
+- **Completeness**: Are there missing considerations?
+
+### Common Fallacies
+```
+Formal Fallacies:
+- Affirming the consequent
+- Denying the antecedent
+- Undistributed middle
+
+Informal Fallacies:
+- Ad hominem (attack person, not argument)
+- Straw man (misrepresent opponent)
+- False dichotomy (only two options)
+- Slippery slope (inevitable cascade)
+- Appeal to authority (expert ≠ correct)
+- Circular reasoning (conclusion as premise)
 ```
 
-Parameters:
-- `--claim`: The claim to evaluate
-- `--evidence`: Supporting or related evidence
-- `--context`: Additional context (optional)
-- `--bias-check`: Enable bias detection (default: true)
-
-Returns: Confidence score (0-100%), reasoning trace, bias flags
-
-### 2. Pattern Detection
-```bash
-python scripts/pattern-scan.py --input "[text]" --type "text"
+### Cognitive Biases
 ```
+Judgment & Decision Making:
+- Confirmation bias
+- Availability heuristic
+- Anchoring and adjustment
+- Overconfidence effect
+- Hindsight bias
+- Sunk cost fallacy
+- Framing effects
 
-Parameters:
-- `--input`: Text to analyze
-- `--type`: Input type (text)
-- `--detect-fallacies`: Detect logical fallacies (optional)
-
-Returns: Patterns found, logical fallacies detected, anomalies
-
-### 3. Bias Detection
-```bash
-python scripts/confidence-scoring.py --text "[text]" --bias-check-only
-```
-
-Returns: List of detected cognitive biases with severity
-
-## Judgment Process
-
-1. **Extract Claim** → Identify the core claim or proposition
-2. **Gather Evidence** → Collect supporting and contradicting evidence
-3. **Scan for Patterns** → Detect patterns, logical fallacies, anomalies
-4. **Score Confidence** → Evaluate claim confidence (0-100%)
-5. **Detect Biases** → Run automated bias checklist
-6. **Build Reasoning Trace** → Document step-by-step reasoning
-7. **Synthesize Output** → Combine into structured judgment
-
-## Output Format
-
-General judgment returns structured JSON:
-
-```json
-{
-  "domain": "judgment",
-  "claim": "...",
-  "confidence": 0.XX,
-  "confidence_breakdown": {
-    "evidence_quality": 0.XX,
-    "logical_coherence": 0.XX,
-    "source_credibility": 0.XX,
-    "consistency": 0.XX
-  },
-  "reasoning": [
-    {
-      "step": 1,
-      "description": "...",
-      "evidence": "...",
-      "inference": "..."
-    }
-  ],
-  "biases_detected": [
-    {
-      "bias": "anchoring|availability|confirmation|hindsight|authority",
-      "severity": "high/medium/low",
-      "description": "...",
-      "mitigation": "..."
-    }
-  ],
-  "logical_fallacies": [
-    {
-      "fallacy": "ad_hominem|straw_man|false_dichotomy|slippery_slope",
-      "description": "..."
-    }
-  ],
-  "evidence_assessment": {
-    "supporting": ["..."],
-    "contradicting": ["..."],
-    "missing": ["..."]
-  },
-  "alternative_explanations": ["..."],
-  "uncertainty_factors": ["..."],
-  "recommendations": ["..."],
-  "next_steps": ["..."]
-}
+Social Biases:
+- Groupthink
+- In-group favoritism
+- Status quo bias
+- Authority bias
 ```
 
 ## Confidence Calibration
 
-### Confidence Levels
+### Good Calibration
+- 90% confidence: Right 90% of the time
+- Track predictions to improve
+- Separate confidence from evidence strength
 
-**90-100% (Virtually Certain)**
-- Established facts with overwhelming evidence
-- Mathematical/logical truths
-- Directly observable phenomena
-- Strong expert consensus
+### Overconfidence Signs
+- Excessive certainty ("definitely", "impossible")
+- Narrow confidence intervals
+- Failure to consider alternatives
+- Dismissing contradictory evidence
 
-**70-90% (Highly Likely)**
-- Well-supported claims with good evidence
-- Strong but not conclusive proof
-- Minor uncertainties remain
+## Structured Analysis
 
-**50-70% (More Likely Than Not)**
-- Weakly supported claims
-- Conflicting evidence
-- Significant uncertainty
+### Devil's Advocate
+1. State the conclusion
+2. List strongest arguments for it
+3. Now argue the opposite
+4. Synthesize balanced view
 
-**30-50% (Unlikely)**
-- Weak evidence
-- Contradictory information
-- Speculative claims
+### Pre-Mortem
+1. Assume the decision failed
+2. Explain why (before it happens)
+3. Identify warning signs
+4. Create contingency plans
 
-**0-30% (Very Unlikely)**
-- Contradicted by evidence
-- Logical inconsistencies
-- No supporting evidence
+### Red Teaming
+1. Assemble critics
+2. Attack the proposal
+3. Surface weaknesses
+4. Strengthen or abandon
 
-### Confidence Factors
+## Output Format
 
-**Evidence Quality (25% weight)**
-- Strength of supporting evidence
-- Independence of sources
-- Verifiability
-- Recency
+```
+CLAIM: (statement being evaluated)
+REASONING_QUALITY: (STRONG/MODERATE/WEAK)
+LOGICAL_VALIDITY: (Valid/Invalid)
+PREMISE_TRUTH: (All true/Some true/Unknown)
+SOUNDNESS: (Sound/Unsound/Unclear)
+CONFIDENCE: (0-100% with calibration note)
+BIASES_CHECKED: (confirmation, anchoring, etc.)
+FALLACIES_FOUND: (list or "None")
+ALTERNATIVES: (other reasonable positions)
+QUALIFYING_CONDITIONS: (when claim holds/fails)
+```
 
-**Logical Coherence (25% weight)**
-- Internal consistency
-- Logical validity
-- Absence of fallacies
-- Parsimony (Occam's razor)
+## Judgment Heuristics
 
-**Source Credibility (25% weight)**
-- Expertise of sources
-- Track record
-- Potential biases
-- Independence
+1. **Outside View**: How often does this happen generally?
+2. **Reference Class**: What category does this belong to?
+3. **Base Rates**: Start with population statistics
+4. **Fermi Estimation**: Break into estimable components
+5. **Devil's Advocate**: Always consider the opposite
 
-**Consistency (25% weight)**
-- Consistency with known facts
-- Consistency across sources
-- Consistency with base rates
+## Improving Judgment
 
-## Cognitive Bias Detection
+- **Keep Decision Journal**: Track predictions and outcomes
+- **Seek Disconfirmation**: Actively look for contrary evidence
+- **Delay Intuition**: First impression may be wrong
+- **Consider Base Rates**: Don't ignore prior probabilities
+- **Diversify Inputs**: Multiple perspectives reduce blind spots
+- **Calibrate Confidence**: Regular prediction tracking
 
-### Systematic Biases
+## Questions for Better Judgment
 
-**Anchoring**
-- Over-reliance on first information received
-- Insufficient adjustment from initial value
-- *Detection*: Check if conclusions shift when starting point changes
-
-**Availability Heuristic**
-- Judging probability by ease of recall
-- Overweighting recent or vivid events
-- *Detection*: Compare to base rates; check for recency bias
-
-**Confirmation Bias**
-- Seeking confirming evidence, ignoring disconfirming
-- Interpretation bias
-- *Detection*: Check if contradictory evidence was considered
-
-**Hindsight Bias**
-- "I knew it all along" after outcome known
-- Overestimating prior predictability
-- *Detection*: Check if prediction documented before outcome
-
-**Authority Bias**
-- Accepting claims based on authority alone
-- Deference to expertise without evaluation
-- *Detection*: Check if evidence evaluated independently
-
-**Dunning-Kruger Effect**
-- Overconfidence in novices, underconfidence in experts
-- *Detection*: Check expertise level vs. confidence calibration
-
-### Logical Fallacies
-
-**Ad Hominem** - Attacking person instead of argument
-**Straw Man** - Misrepresenting opponent's position
-**False Dichotomy** - Presenting only two options when more exist
-**Slippery Slope** - Assuming chain reaction without evidence
-**Appeal to Emotion** - Using emotion instead of evidence
-**Circular Reasoning** - Conclusion assumed in premise
-**Post Hoc** - Assuming causation from correlation
-
-## Judgment Principles
-
-1. **Be Explicit About Uncertainty**
-   - State confidence levels clearly
-   - Provide uncertainty ranges
-   - Distinguish facts from inferences
-
-2. **Update with New Evidence**
-   - Use Bayesian updating
-   - Revise confidence when new information arrives
-   - Be willing to change mind
-
-3. **Flag Weak Reasoning**
-   - Identify logical gaps
-   - Point out missing evidence
-   - Note unsupported assumptions
-
-4. **Prefer Simple Explanations**
-   - Apply Occam's razor
-   - Favor explanations with fewer assumptions
-   - Avoid unnecessary complexity
-
-5. **Consider Alternative Explanations**
-   - Generate multiple hypotheses
-   - Evaluate each against evidence
-   - Avoid premature convergence
-
-6. **Confidence ≠ Probability**
-   - Confidence reflects evidence quality
-   - Probability reflects frequency
-   - Distinguish epistemic from aleatory uncertainty
-
-## Calibration Exercises
-
-### Overconfidence Test
-When confidence is X%, verify that claim is true X% of time:
-- 90% confident → Should be correct 9/10 times
-- 70% confident → Should be correct 7/10 times
-- 50% confident → Should be correct 5/10 times
-
-If systematically over/under-confident, adjust calibration.
-
-### Base Rate Consideration
-Always consider base rates:
-- What's the historical frequency?
-- What would we expect by chance?
-- How does this compare to similar cases?
-
-### Falsifiability Check
-Good claims can be proven wrong:
-- What evidence would disprove this?
-- Is the claim testable?
-- Are there hidden assumptions?
-
-## Workflow
-
-1. **Detect judgment query** → User asks for evaluation, confidence, or reasoning
-2. **Extract claim** → Identify the core proposition
-3. **Scan for patterns** → Detect fallacies and biases
-4. **Score confidence** → Evaluate using confidence factors
-5. **Build reasoning trace** → Document step-by-step logic
-6. **Present judgment** → Show confidence, biases, reasoning, alternatives
+1. What would prove me wrong?
+2. What's the base rate for this type of event?
+3. Have I sought disconfirming evidence?
+4. Am I confusing confidence with accuracy?
+5. What are the second-order effects?
+6. How would someone smart disagree?
+7. What's the opportunity cost?

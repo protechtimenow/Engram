@@ -1,345 +1,375 @@
 #!/usr/bin/env python3
 """
-Reusable confidence scoring across domains
-Scores claims 0-100% with bias detection
+Universal Confidence Scoring - Engram Neural Core
+Provides 0-100% confidence scoring with bias detection across all domains.
+
+Usage:
+    python confidence_scoring.py --claim "Bitcoin will reach $100k" --evidence "Historical patterns"
+    python confidence_scoring.py --claim "ETH is undervalued" --bias-check --domain trading
 """
 
 import argparse
 import json
 import sys
 import re
-from typing import Dict, List, Tuple
-
-# Add the Engram skills path
-sys.path.insert(0, r'C:\Users\OFFRSTAR0\Engram')
-
-from skills.engram.lmstudio_client import LMStudioClient
-import asyncio
+from typing import Dict, List, Any, Optional
+from dataclasses import dataclass, asdict
+from enum import Enum
 
 
-def detect_anchoring(text: str) -> Dict:
-    """Detect anchoring bias - fixation on first information"""
-    indicators = [
-        r"first (?:data|number|value|estimate)",
-        r"initial (?:price|value|estimate)",
-        r"started at",
-        r"originally (?:said|estimated|priced)"
-    ]
-    
-    matches = []
-    for pattern in indicators:
-        if re.search(pattern, text, re.IGNORECASE):
-            matches.append(pattern)
-    
-    return {
-        "detected": len(matches) > 0,
-        "severity": "medium" if len(matches) > 1 else "low" if matches else "none",
-        "matches": matches
-    }
+class Domain(Enum):
+    """Analysis domains."""
+    TRADING = "trading"
+    RESEARCH = "research"
+    STRATEGY = "strategy"
+    JUDGMENT = "judgment"
 
 
-def detect_availability(text: str) -> Dict:
-    """Detect availability heuristic - overweighting recent events"""
-    indicators = [
-        r"recently",
-        r"just (?:happened|occurred)",
-        r"(?:last|this) (?:week|month|year)",
-        r"(?:remember|recall) when",
-        r"(?:big|major) (?:news|event)"
-    ]
-    
-    matches = []
-    for pattern in indicators:
-        if re.search(pattern, text, re.IGNORECASE):
-            matches.append(pattern)
-    
-    return {
-        "detected": len(matches) > 0,
-        "severity": "medium" if len(matches) > 2 else "low" if matches else "none",
-        "matches": matches
-    }
+class BiasType(Enum):
+    """Cognitive bias types."""
+    CONFIRMATION = "confirmation_bias"
+    ANCHORING = "anchoring_bias"
+    RECENCY = "recency_bias"
+    OVERCONFIDENCE = "overconfidence"
+    SURVIVORSHIP = "survivorship_bias"
+    HINDSIGHT = "hindsight_bias"
+    AVAILABILITY = "availability_heuristic"
 
 
-def detect_confirmation_bias(text: str) -> Dict:
-    """Detect confirmation bias - seeking confirming evidence"""
-    indicators = [
-        r"proves (?:that|my)",
-        r"confirms (?:that|my)",
-        r"as I expected",
-        r"I knew",
-        r"obviously",
-        r"clearly shows"
-    ]
-    
-    matches = []
-    for pattern in indicators:
-        if re.search(pattern, text, re.IGNORECASE):
-            matches.append(pattern)
-    
-    return {
-        "detected": len(matches) > 0,
-        "severity": "high" if len(matches) > 2 else "medium" if len(matches) > 1 else "low" if matches else "none",
-        "matches": matches
-    }
+@dataclass
+class BiasDetection:
+    """Detected bias information."""
+    bias_type: str
+    confidence: float
+    evidence: str
+    mitigation: str
 
 
-def detect_hindsight(text: str) -> Dict:
-    """Detect hindsight bias - overestimating prior knowledge"""
-    indicators = [
-        r"I knew (?:it|this) would",
-        r"(?:obvious|clear) (?:that|in) hindsight",
-        r"should have (?:seen|known)",
-        r"everyone knew",
-        r"predictable"
-    ]
-    
-    matches = []
-    for pattern in indicators:
-        if re.search(pattern, text, re.IGNORECASE):
-            matches.append(pattern)
-    
-    return {
-        "detected": len(matches) > 0,
-        "severity": "medium" if len(matches) > 1 else "low" if matches else "none",
-        "matches": matches
-    }
+@dataclass
+class ConfidenceResult:
+    """Confidence scoring result."""
+    claim: str
+    domain: str
+    confidence_score: float  # 0-100
+    uncertainty_range: tuple  # (min, max)
+    evidence_strength: float  # 0-1
+    logical_consistency: float  # 0-1
+    biases_detected: List[BiasDetection]
+    key_assumptions: List[str]
+    missing_information: List[str]
+    recommendation: str
 
 
-def detect_authority_bias(text: str) -> Dict:
-    """Detect authority bias - over-reliance on authority"""
-    indicators = [
-        r"expert says",
-        r"according to (?:the|an) expert",
-        r"(?:famous|renowned) (?:analyst|expert)",
-        r"(?:they|he|she) is an expert",
-        r"source said"
-    ]
+class ConfidenceScorer:
+    """Universal confidence scoring engine."""
     
-    matches = []
-    for pattern in indicators:
-        if re.search(pattern, text, re.IGNORECASE):
-            matches.append(pattern)
-    
-    return {
-        "detected": len(matches) > 0,
-        "severity": "low" if matches else "none",
-        "matches": matches
-    }
-
-
-def calculate_confidence_score(claim: str, evidence: str, bias_results: Dict) -> float:
-    """Calculate confidence score based on evidence quality and biases"""
-    
-    # Base confidence from evidence length/quality
-    base_score = min(0.5, len(evidence) / 2000)  # Cap at 0.5 for evidence alone
-    
-    # Evidence quality indicators
-    quality_boost = 0.0
-    if re.search(r"\d+\.?\d*%", evidence):  # Contains percentages
-        quality_boost += 0.1
-    if re.search(r"\d{4}-\d{2}-\d{2}", evidence):  # Contains dates
-        quality_boost += 0.05
-    if len(evidence.split()) > 50:  # Substantial evidence
-        quality_boost += 0.1
-    if re.search(r"(?:study|research|data|report)", evidence, re.IGNORECASE):
-        quality_boost += 0.1
-    
-    # Bias penalties
-    bias_penalty = 0.0
-    for bias_name, bias_data in bias_results.items():
-        if bias_data.get("detected"):
-            severity = bias_data.get("severity", "low")
-            if severity == "high":
-                bias_penalty += 0.15
-            elif severity == "medium":
-                bias_penalty += 0.1
-            else:
-                bias_penalty += 0.05
-    
-    # Calculate final score
-    confidence = base_score + quality_boost - bias_penalty
-    return max(0.0, min(1.0, confidence))  # Clamp to [0, 1]
-
-
-def build_confidence_breakdown(claim: str, evidence: str, bias_results: Dict) -> Dict:
-    """Build detailed confidence breakdown"""
-    
-    # Evidence quality (0-1)
-    evidence_quality = min(1.0, len(evidence) / 1000)
-    if re.search(r"(?:study|research|data|source)", evidence, re.IGNORECASE):
-        evidence_quality = min(1.0, evidence_quality + 0.2)
-    
-    # Logical coherence (0-1) - simplified check
-    logical_coherence = 0.7  # Default assumption
-    if len(claim.split()) > 5:  # Non-trivial claim
-        logical_coherence = 0.8
-    if not re.search(r"\b(but|however|although)\b", claim, re.IGNORECASE):
-        logical_coherence += 0.1  # No contradictions detected
-    
-    # Source credibility (0-1)
-    source_credibility = 0.5  # Default
-    if re.search(r"(?:official|government|academic|peer-reviewed)", evidence, re.IGNORECASE):
-        source_credibility = 0.8
-    elif re.search(r"(?:report|study|survey)", evidence, re.IGNORECASE):
-        source_credibility = 0.7
-    
-    # Consistency (0-1)
-    consistency = 0.7
-    if bias_results.get("confirmation_bias", {}).get("detected"):
-        consistency -= 0.2
-    if bias_results.get("anchoring", {}).get("detected"):
-        consistency -= 0.1
-    
-    return {
-        "evidence_quality": round(evidence_quality, 2),
-        "logical_coherence": round(logical_coherence, 2),
-        "source_credibility": round(source_credibility, 2),
-        "consistency": round(max(0, consistency), 2)
-    }
-
-
-def estimate_implied_probability(funding_rates: List[float], price: float) -> float:
-    """Estimate probability from funding rates"""
-    if not funding_rates:
-        return 0.5
-    
-    avg_rate = sum(funding_rates) / len(funding_rates)
-    # Normalize to probability (simplified model)
-    probability = 0.5 + (avg_rate * 10)
-    return max(0.0, min(1.0, probability))
-
-
-def calculate_kelly_fraction(edge: float, odds: float) -> float:
-    """
-    Kelly criterion position sizing
-    f* = (bp - q) / b = (b*edge - 1) / b
-    
-    Args:
-        edge: Probability of winning (0-1)
-        odds: Net odds received (profit/risk)
-    
-    Returns:
-        Optimal fraction of bankroll to allocate
-    """
-    if odds <= 0 or edge <= 0 or edge >= 1:
-        return 0.0
-    
-    q = 1 - edge  # Probability of loss
-    kelly = (odds * edge - q) / odds
-    
-    # Use half-Kelly for safety
-    half_kelly = kelly / 2
-    
-    return max(0.0, min(half_kelly, 0.25))  # Cap at 25%
-
-
-async def score_claim(claim: str, evidence: str, bias_check: bool = True) -> Dict:
-    """
-    Score claim 0-100% with bias detection
-    
-    Args:
-        claim: The claim to evaluate
-        evidence: Supporting evidence
-        bias_check: Whether to detect cognitive biases
-    
-    Returns:
-        JSON with confidence score, reasoning trace, bias checks
-    """
-    
-    # Detect biases
-    bias_results = {}
-    if bias_check:
-        combined_text = f"{claim} {evidence}"
-        bias_results = {
-            "anchoring": detect_anchoring(combined_text),
-            "availability": detect_availability(combined_text),
-            "confirmation_bias": detect_confirmation_bias(combined_text),
-            "hindsight": detect_hindsight(combined_text),
-            "authority": detect_authority_bias(combined_text)
-        }
-    
-    # Calculate confidence
-    confidence = calculate_confidence_score(claim, evidence, bias_results)
-    
-    # Build breakdown
-    breakdown = build_confidence_breakdown(claim, evidence, bias_results)
-    
-    # Build reasoning trace
-    reasoning = [
-        {
-            "step": 1,
-            "description": "Extracted claim and evidence",
-            "evidence": f"Claim length: {len(claim)} chars, Evidence length: {len(evidence)} chars"
-        },
-        {
-            "step": 2,
-            "description": "Evaluated evidence quality",
-            "evidence": f"Evidence quality score: {breakdown['evidence_quality']}"
-        }
-    ]
-    
-    if bias_check:
-        detected_biases = [k for k, v in bias_results.items() if v.get("detected")]
-        reasoning.append({
-            "step": 3,
-            "description": "Completed bias detection scan",
-            "evidence": f"Detected biases: {detected_biases if detected_biases else 'None'}"
-        })
-    
-    # Build output
-    output = {
-        "claim": claim,
-        "confidence": round(confidence, 2),
-        "confidence_breakdown": breakdown,
-        "reasoning": reasoning,
-        "biases_detected": [
-            {
-                "bias": k,
-                "severity": v["severity"],
-                "description": f"{k.replace('_', ' ').title()} bias detected" if v["detected"] else f"No {k.replace('_', ' ')} bias"
-            }
-            for k, v in bias_results.items() if bias_check
+    # Bias detection patterns
+    BIAS_PATTERNS = {
+        BiasType.CONFIRMATION: [
+            r"obviously|clearly|certainly|definitely",
+            r"everyone knows|it's well known",
+            r"only a fool would|anyone can see"
         ],
-        "evidence_assessment": {
-            "supporting": [evidence[:200] + "..." if len(evidence) > 200 else evidence],
-            "contradicting": [],
-            "missing": []
-        },
-        "recommendations": [
-            "Consider seeking additional independent sources" if confidence < 0.7 else "Evidence quality is acceptable",
-            "Review for potential biases" if any(v.get("detected") for v in bias_results.values()) else "No major biases detected"
+        BiasType.ANCHORING: [
+            r"started at|began at|originally",
+            r"compared to|relative to",
+            r"back when it was"
+        ],
+        BiasType.RECENCY: [
+            r"recently|lately|these days",
+            r"just happened|last week|yesterday",
+            r"trending now|current hype"
+        ],
+        BiasType.OVERCONFIDENCE: [
+            r"guaranteed|sure thing|can't lose",
+            r"100%|absolutely|no doubt",
+            r"always|never|every time"
+        ],
+        BiasType.AVAILABILITY: [
+            r"I heard|someone said|people are saying",
+            r"in the news|media coverage",
+            r"everyone is talking about"
         ]
     }
     
+    def __init__(self, domain: Domain = Domain.JUDGMENT):
+        self.domain = domain
+        
+    def score(self, claim: str, evidence: Optional[str] = None,
+              bias_check: bool = True) -> ConfidenceResult:
+        """
+        Score confidence of a claim.
+        
+        Args:
+            claim: The claim to evaluate
+            evidence: Supporting evidence
+            bias_check: Whether to check for cognitive biases
+            
+        Returns:
+            ConfidenceResult with detailed analysis
+        """
+        biases = []
+        if bias_check:
+            biases = self._detect_biases(claim, evidence or "")
+        
+        evidence_strength = self._assess_evidence(claim, evidence)
+        logical_consistency = self._check_consistency(claim)
+        
+        # Calculate base confidence
+        base_confidence = (evidence_strength * 40 + 
+                          logical_consistency * 30 + 
+                          (1 - len(biases) * 0.1) * 30)
+        
+        # Adjust for domain
+        domain_adjustment = self._domain_adjustment()
+        
+        final_score = max(0, min(100, base_confidence + domain_adjustment))
+        
+        # Calculate uncertainty range
+        uncertainty = self._calculate_uncertainty(biases, evidence)
+        
+        return ConfidenceResult(
+            claim=claim,
+            domain=self.domain.value,
+            confidence_score=round(final_score, 1),
+            uncertainty_range=(
+                round(max(0, final_score - uncertainty), 1),
+                round(min(100, final_score + uncertainty), 1)
+            ),
+            evidence_strength=round(evidence_strength, 2),
+            logical_consistency=round(logical_consistency, 2),
+            biases_detected=biases,
+            key_assumptions=self._extract_assumptions(claim),
+            missing_information=self._identify_gaps(claim, evidence),
+            recommendation=self._generate_recommendation(final_score, biases)
+        )
+    
+    def _detect_biases(self, claim: str, evidence: str) -> List[BiasDetection]:
+        """Detect cognitive biases in text."""
+        biases = []
+        text = f"{claim} {evidence}".lower()
+        
+        for bias_type, patterns in self.BIAS_PATTERNS.items():
+            for pattern in patterns:
+                if re.search(pattern, text):
+                    biases.append(BiasDetection(
+                        bias_type=bias_type.value,
+                        confidence=0.7,
+                        evidence=f"Pattern matched: '{pattern}'",
+                        mitigation=self._get_mitigation(bias_type)
+                    ))
+                    break
+        
+        return biases
+    
+    def _get_mitigation(self, bias_type: BiasType) -> str:
+        """Get mitigation strategy for bias."""
+        mitigations = {
+            BiasType.CONFIRMATION: "Actively seek disconfirming evidence",
+            BiasType.ANCHORING: "Consider multiple reference points",
+            BiasType.RECENCY: "Look at longer historical trends",
+            BiasType.OVERCONFIDENCE: "Apply 50% confidence discount",
+            BiasType.AVAILABILITY: "Seek data beyond personal exposure"
+        }
+        return mitigations.get(bias_type, "Review with fresh perspective")
+    
+    def _assess_evidence(self, claim: str, evidence: Optional[str]) -> float:
+        """Assess strength of evidence (0-1)."""
+        if not evidence:
+            return 0.3
+        
+        score = 0.5
+        
+        # Check for data/numbers
+        if re.search(r'\d+\.?\d*%?', evidence):
+            score += 0.15
+        
+        # Check for sources/references
+        if re.search(r'(study|research|data|source|according to)', evidence, re.I):
+            score += 0.15
+        
+        # Check for specificity
+        if len(evidence) > 100:
+            score += 0.1
+        
+        return min(1.0, score)
+    
+    def _check_consistency(self, claim: str) -> float:
+        """Check logical consistency (0-1)."""
+        # Placeholder - would use more sophisticated logic
+        return 0.75
+    
+    def _domain_adjustment(self) -> float:
+        """Adjust score based on domain characteristics."""
+        adjustments = {
+            Domain.TRADING: -5,  # Markets are uncertain
+            Domain.RESEARCH: 0,
+            Domain.STRATEGY: -3,
+            Domain.JUDGMENT: -2
+        }
+        return adjustments.get(self.domain, 0)
+    
+    def _calculate_uncertainty(self, biases: List[BiasDetection], 
+                               evidence: Optional[str]) -> float:
+        """Calculate uncertainty range."""
+        base = 10
+        base += len(biases) * 5
+        if not evidence:
+            base += 10
+        return min(30, base)
+    
+    def _extract_assumptions(self, claim: str) -> List[str]:
+        """Extract key assumptions from claim."""
+        assumptions = []
+        
+        # Look for conditional statements
+        if re.search(r'if|assuming|provided that', claim, re.I):
+            assumptions.append("Conditional outcome depends on stated requirements")
+        
+        # Look for temporal assumptions
+        if re.search(r'will|going to|future', claim, re.I):
+            assumptions.append("Future conditions remain favorable")
+        
+        # Look for causation
+        if re.search(r'because|causes|leads to|results in', claim, re.I):
+            assumptions.append("Causal relationship holds as stated")
+        
+        if not assumptions:
+            assumptions.append("Claim assumes current trends continue")
+        
+        return assumptions
+    
+    def _identify_gaps(self, claim: str, evidence: Optional[str]) -> List[str]:
+        """Identify missing information."""
+        gaps = []
+        
+        if not evidence:
+            gaps.append("No supporting evidence provided")
+        
+        if not re.search(r'\d', claim + (evidence or "")):
+            gaps.append("Lack of quantitative data")
+        
+        if not re.search(r'(time|date|when|by)', claim + (evidence or ""), re.I):
+            gaps.append("No timeframe specified")
+        
+        return gaps if gaps else ["Contextual factors not fully explored"]
+    
+    def _generate_recommendation(self, score: float, 
+                                  biases: List[BiasDetection]) -> str:
+        """Generate recommendation based on score."""
+        if score >= 80:
+            return "HIGH_CONFIDENCE: Suitable for action with standard risk management"
+        elif score >= 60:
+            return "MODERATE_CONFIDENCE: Proceed with caution and additional verification"
+        elif score >= 40:
+            return "LOW_CONFIDENCE: Requires more research before acting"
+        else:
+            return "INSUFFICIENT_CONFIDENCE: Do not act based on this claim alone"
+
+
+def format_output(result: ConfidenceResult, format_type: str = "text") -> str:
+    """Format confidence result."""
+    if format_type == "json":
+        return json.dumps(asdict(result), indent=2, default=str)
+    
+    bias_text = ""
+    if result.biases_detected:
+        bias_text = "\n  ⚠️  BIASES DETECTED:\n" + \
+            "\n".join(f"    • {b.bias_type} ({b.confidence:.0%} confidence)\n" +
+                     f"      Mitigation: {b.mitigation}" for b in result.biases_detected)
+    else:
+        bias_text = "\n  ✅ No significant biases detected"
+    
+    output = f"""
+╔══════════════════════════════════════════════════════════════╗
+║              CONFIDENCE SCORING RESULT                        ║
+╠══════════════════════════════════════════════════════════════╣
+  Domain: {result.domain.upper()}
+  
+  📝 CLAIM:
+    "{result.claim}"
+  
+  📊 CONFIDENCE: {result.confidence_score:.1f}%
+     Range: {result.uncertainty_range[0]:.1f}% - {result.uncertainty_range[1]:.1f}%
+  
+  📈 FACTORS:
+    • Evidence Strength: {result.evidence_strength:.0%}
+    • Logical Consistency: {result.logical_consistency:.0%}{bias_text}
+  
+  🔑 KEY ASSUMPTIONS:
+    {chr(10).join('    • ' + a for a in result.key_assumptions)}
+  
+  ❓ MISSING INFO:
+    {chr(10).join('    • ' + m for m in result.missing_information)}
+  
+  💡 RECOMMENDATION:
+    {result.recommendation}
+╚══════════════════════════════════════════════════════════════╝
+"""
     return output
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Confidence Scoring")
-    parser.add_argument("--claim", required=True, help="The claim to evaluate")
-    parser.add_argument("--evidence", default="", help="Supporting evidence")
-    parser.add_argument("--context", default="", help="Additional context")
-    parser.add_argument("--bias-check", action="store_true", default=True, help="Enable bias detection")
-    parser.add_argument("--bias-check-only", action="store_true", help="Only run bias detection")
+    parser = argparse.ArgumentParser(
+        description="Score confidence of claims with bias detection",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog)s --claim "Bitcoin will reach $100k" --evidence "Halving cycle history"
+  %(prog)s --claim "ETH is undervalued" --domain trading --bias-check
+  %(prog)s --claim "Strategy X is optimal" --domain strategy --output json
+        """
+    )
+    
+    parser.add_argument(
+        "--claim", "-c",
+        required=True,
+        help="Claim to evaluate"
+    )
+    parser.add_argument(
+        "--evidence", "-e",
+        help="Supporting evidence"
+    )
+    parser.add_argument(
+        "--domain", "-d",
+        choices=[d.value for d in Domain],
+        default="judgment",
+        help="Analysis domain"
+    )
+    parser.add_argument(
+        "--bias-check",
+        action="store_true",
+        help="Enable bias detection"
+    )
+    parser.add_argument(
+        "--output", "-o",
+        choices=["text", "json"],
+        default="text",
+        help="Output format"
+    )
     
     args = parser.parse_args()
     
-    if args.bias_check_only:
-        # Only run bias detection
-        combined_text = f"{args.claim} {args.evidence}"
-        bias_results = {
-            "anchoring": detect_anchoring(combined_text),
-            "availability": detect_availability(combined_text),
-            "confirmation_bias": detect_confirmation_bias(combined_text),
-            "hindsight": detect_hindsight(combined_text),
-            "authority": detect_authority_bias(combined_text)
-        }
-        print(json.dumps(bias_results, indent=2))
+    # Run scoring
+    domain = Domain(args.domain)
+    scorer = ConfidenceScorer(domain=domain)
+    result = scorer.score(
+        claim=args.claim,
+        evidence=args.evidence,
+        bias_check=args.bias_check
+    )
+    
+    # Output results
+    print(format_output(result, args.output))
+    
+    # Exit code based on confidence
+    if result.confidence_score >= 70:
+        return 0
+    elif result.confidence_score >= 50:
+        return 1
     else:
-        # Full confidence scoring
-        result = asyncio.run(score_claim(args.claim, args.evidence, args.bias_check))
-        print(json.dumps(result, indent=2))
+        return 2
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

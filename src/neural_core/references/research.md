@@ -1,144 +1,82 @@
-# Research Domain (Neural Core)
+# Research Domain Reference
 
-Use engram for systematic research and pattern recognition. This reference file provides domain-specific guidance for research queries.
+## Core Principles
 
-## Available Scripts
+1. **Evidence Hierarchy**: Data > Anecdote > Opinion
+2. **Source Quality**: Primary > Secondary > Tertiary
+3. **Bias Awareness**: All sources have perspective
+4. **Uncertainty Quantification**: Confidence intervals over point estimates
 
-### 1. Pattern Scanning
-```bash
-python scripts/pattern-scan.py --input "[text]" --type "[text|data]"
+## Analysis Framework
+
+### Claim Verification
+- **Source Check**: Who made the claim? What's their expertise?
+- **Evidence Review**: What supports the claim?
+- **Counter-Evidence**: What contradicts it?
+- **Confidence Score**: 0-100% with rationale
+
+### Pattern Detection
+- **Logical Fallacies**: Ad hominem, straw man, appeal to authority
+- **Cognitive Biases**: Confirmation, anchoring, availability
+- **Statistical Errors**: Correlation≠causation, small samples
+- **Rhetorical Devices**: Loaded language, false dichotomies
+
+### Bias Detection Checklist
 ```
+Confirmation Bias:
+- Only seeking supporting evidence?
+- Ignoring contradictory data?
+- Selective interpretation?
 
-Parameters:
-- `--input`: Text or data to scan
-- `--type`: Type of input (text or data)
-- `--patterns`: Specific regex patterns to look for (optional)
+Anchoring Bias:
+- Fixated on initial information?
+- Insufficient adjustment from starting point?
+- Overvaluing "first impression"?
 
-Returns: Patterns found, confidence per pattern, anomalies detected
+Recency Bias:
+- Overweighting recent events?
+- Ignoring historical context?
+- Assuming trends continue?
 
-### 2. Confidence Scoring
-```bash
-python scripts/confidence-scoring.py --claim "[claim]" --evidence "[evidence]"
+Availability Heuristic:
+- Judging by ease of recall?
+- Media coverage ≠ importance?
+- Personal exposure bias?
 ```
-
-Parameters:
-- `--claim`: The claim to evaluate
-- `--evidence`: Supporting evidence
-- `--bias-check`: Enable bias detection (default: true)
-
-Returns: Confidence score (0-100%), reasoning trace, bias flags
-
-### 3. Bias Detection
-```bash
-python scripts/confidence-scoring.py --claim "[claim]" --evidence "[evidence]" --bias-check-only
-```
-
-Returns: List of detected cognitive biases
-
-## Research Process
-
-1. **Extract Claims** → Identify key claims from user input
-2. **Gather Evidence** → Collect supporting/contradicting evidence
-3. **Pattern Scan** → Run pattern detection on text/data
-4. **Score Confidence** → Evaluate each claim's confidence
-5. **Detect Biases** → Run automated bias checklist
-6. **Synthesize** → Combine results into structured output
 
 ## Output Format
 
-Research analysis returns structured JSON:
-
-```json
-{
-  "domain": "research",
-  "claims": [
-    {
-      "claim": "...",
-      "confidence": 0.XX,
-      "evidence_quality": "high/medium/low",
-      "bias_check": "...",
-      "supporting_evidence": ["..."],
-      "contradicting_evidence": ["..."]
-    }
-  ],
-  "patterns": [
-    {
-      "pattern": "...",
-      "confidence": 0.XX,
-      "locations": ["..."]
-    }
-  ],
-  "anomalies": ["..."],
-  "biases_detected": [
-    {
-      "bias": "anchoring|availability|confirmation|hindsight",
-      "severity": "high/medium/low",
-      "description": "..."
-    }
-  ],
-  "overall_confidence": 0.XX,
-  "reasoning": [
-    {"step": "...", "evidence": "..."}
-  ],
-  "next_steps": ["...", "..."]
-}
+```
+CLAIM: (exact claim being evaluated)
+VERDICT: (SUPPORTED/PARTIALLY_SUPPORTED/UNSUPPORTED/UNVERIFIABLE)
+CONFIDENCE: (0-100% with range)
+EVIDENCE_STRENGTH: (0-1 scale)
+BIASES_DETECTED: (list with severity)
+KEY_ASSUMPTIONS: (what must be true)
+MISSING_INFO: (gaps in knowledge)
+RECOMMENDATION: (how to use this info)
 ```
 
-## Cognitive Bias Detection
+## Quality Indicators
 
-### Anchoring Bias
-- **Signs**: Fixation on first piece of information
-- **Detection**: Check if initial data point disproportionately influences conclusions
-- **Mitigation**: Explicitly consider alternative starting points
+Strong Evidence:
+- Peer-reviewed studies
+- Primary data sources
+- Transparent methodology
+- Replicable results
+- Conflicts of interest disclosed
 
-### Availability Heuristic
-- **Signs**: Overweighting recent or memorable events
-- **Detection**: Check if analysis over-relies on recent examples
-- **Mitigation**: Actively seek historical data and base rates
+Weak Evidence:
+- Anecdotal reports
+- Unverified sources
+- Methodology unclear
+- Cherry-picked data
+- Financial conflicts hidden
 
-### Confirmation Bias
-- **Signs**: Seeking only confirming evidence, ignoring contradictions
-- **Detection**: Check if contradicting evidence was considered
-- **Mitigation**: Actively search for disconfirming evidence
+## Research Heuristics
 
-### Hindsight Bias
-- **Signs**: Overestimating prior knowledge after outcome known
-- **Detection**: Check if "I knew it all along" language present
-- **Mitigation**: Document predictions before outcomes known
-
-### Authority Bias
-- **Signs**: Over-reliance on authority figures
-- **Detection**: Check if claims accepted based on source alone
-- **Mitigation**: Evaluate evidence independently of source
-
-## Research Principles
-
-1. **Source Credibility** → Prioritize credible, verifiable sources
-2. **Information Asymmetry** → Check for gaps in available information
-3. **Bayesian Updating** → Update confidence when new evidence arrives
-4. **Avoid Overconfidence** → Be explicit about uncertainty ranges
-5. **Falsifiability** → Good claims can be proven wrong
-6. **Base Rates** → Consider historical frequencies and probabilities
-
-## Calibration Guidelines
-
-### Evidence Quality Levels
-- **High**: Multiple independent sources, verifiable data, expert consensus
-- **Medium**: Limited sources, some verification, mixed expert opinion
-- **Low**: Single source, unverified claims, no expert consensus
-
-### Confidence Calibration
-- 90-100%: Established facts, verified data, strong consensus
-- 70-90%: Well-supported claims, some uncertainty
-- 50-70%: Weakly supported claims, significant uncertainty
-- 30-50%: Speculative claims, limited evidence
-- 0-30%: Unsupported claims, contradictory evidence
-
-## Workflow
-
-1. **Detect research query** → User asks to analyze claim, pattern, or evidence
-2. **Extract claims** → Identify specific claims to evaluate
-3. **Run pattern scan** → Detect patterns in text/data
-4. **Score confidence** → Evaluate claim confidence with bias detection
-5. **Synthesize results** → Combine into structured JSON
-6. **Present findings** → Show confidence scores, biases, next steps
+1. **Falsifiability**: Can the claim be proven wrong?
+2. **Occam's Razor**: Simplest explanation is usually best
+3. **Extraordinary Claims**: Require extraordinary evidence
+4. **Correlation**: Doesn't imply causation
+5. **Sample Size**: Larger is better, check representativeness

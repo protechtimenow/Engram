@@ -1,408 +1,515 @@
 #!/usr/bin/env python3
 """
-Decision network builder
-Builds decision trees with Bayesian probabilities
+Decision Frameworks - Engram Neural Core
+Bayesian networks, Monte Carlo simulation, and Kelly criterion calculations.
+
+Usage:
+    python decision_nets.py --kelly --edge 0.6 --odds 2.0
+    python decision_nets.py --bayesian --nodes "[A,B,C]" --probabilities "{...}"
+    python decision_nets.py --monte-carlo --simulations 10000 --win-rate 0.55
 """
 
 import argparse
 import json
+import sys
 import random
-from typing import Dict, List, Any
-from dataclasses import dataclass
+import math
+from typing import Dict, List, Any, Optional, Tuple
+from dataclasses import dataclass, asdict
 from enum import Enum
 
 
-class DecisionNodeType(Enum):
-    DECISION = "decision"
-    CHANCE = "chance"
-    TERMINAL = "terminal"
+class DecisionType(Enum):
+    """Types of decision frameworks."""
+    KELLY = "kelly"
+    BAYESIAN = "bayesian"
+    MONTE_CARLO = "monte_carlo"
+    EXPECTED_VALUE = "expected_value"
 
 
 @dataclass
-class DecisionNode:
+class KellyResult:
+    """Kelly criterion calculation result."""
+    edge: float
+    odds: float
+    win_probability: float
+    lose_probability: float
+    full_kelly: float  # Optimal fraction
+    half_kelly: float  # Conservative
+    quarter_kelly: float  # Very conservative
+    expected_growth: float
+    risk_of_ruin: float
+
+
+@dataclass
+class BayesianNode:
+    """Node in Bayesian network."""
     name: str
-    node_type: DecisionNodeType
-    children: List['DecisionNode'] = None
-    probability: float = 1.0
-    value: float = 0.0
-    description: str = ""
-    
-    def __post_init__(self):
-        if self.children is None:
-            self.children = []
+    probability: float
+    parents: List[str]
+    conditional_probabilities: Dict[Tuple, float]
 
 
-def build_decision_tree(nodes_config: List[Dict], probabilities: Dict[str, float]) -> DecisionNode:
-    """
-    Build decision tree from configuration
-    
-    Args:
-        nodes_config: List of node configurations
-        probabilities: Probabilities for each branch
-    
-    Returns:
-        Root DecisionNode
-    """
-    if not nodes_config:
-        return None
-    
-    # Build nodes
-    node_map = {}
-    for config in nodes_config:
-        node = DecisionNode(
-            name=config["name"],
-            node_type=DecisionNodeType(config.get("type", "decision")),
-            probability=probabilities.get(config["name"], 1.0),
-            value=config.get("value", 0.0),
-            description=config.get("description", "")
-        )
-        node_map[config["name"]] = node
-    
-    # Build tree structure
-    for config in nodes_config:
-        node = node_map[config["name"]]
-        for child_name in config.get("children", []):
-            if child_name in node_map:
-                node.children.append(node_map[child_name])
-    
-    # Find root (node with no parent)
-    all_children = set()
-    for config in nodes_config:
-        all_children.update(config.get("children", []))
-    
-    root_name = None
-    for config in nodes_config:
-        if config["name"] not in all_children:
-            root_name = config["name"]
-            break
-    
-    return node_map.get(root_name) if root_name else None
+@dataclass
+class BayesianResult:
+    """Bayesian inference result."""
+    nodes: List[BayesianNode]
+    posterior_probabilities: Dict[str, float]
+    most_likely_state: str
+    confidence: float
 
 
-def calculate_expected_value(node: DecisionNode, depth: int = 0) -> float:
-    """
-    Calculate expected value for a decision tree
-    
-    Args:
-        node: Current node
-        depth: Current depth (for recursion)
-    
-    Returns:
-        Expected value
-    """
-    if not node.children:
-        return node.value
-    
-    if node.node_type == DecisionNodeType.DECISION:
-        # Choose child with max expected value
-        return max(calculate_expected_value(child, depth + 1) for child in node.children)
-    
-    elif node.node_type == DecisionNodeType.CHANCE:
-        # Calculate weighted average
-        total_ev = 0.0
-        total_prob = 0.0
-        for child in node.children:
-            child_ev = calculate_expected_value(child, depth + 1)
-            total_ev += child.probability * child_ev
-            total_prob += child.probability
-        return total_ev / total_prob if total_prob > 0 else 0.0
-    
-    else:  # TERMINAL
-        return node.value
+@dataclass
+class MonteCarloResult:
+    """Monte Carlo simulation result."""
+    simulations: int
+    win_rate: float
+    avg_return: float
+    max_drawdown: float
+    sharpe_ratio: float
+    percentile_5: float
+    percentile_95: float
+    probability_profit: float
+    expected_value: float
 
 
-def find_optimal_path(node: DecisionNode, path: List[str] = None) -> List[str]:
-    """
-    Find optimal decision path
-    
-    Args:
-        node: Current node
-        path: Current path
-    
-    Returns:
-        Optimal path as list of node names
-    """
-    if path is None:
-        path = []
-    
-    path.append(node.name)
-    
-    if not node.children:
-        return path
-    
-    if node.node_type == DecisionNodeType.DECISION:
-        # Choose child with max expected value
-        best_child = max(node.children, key=lambda c: calculate_expected_value(c))
-        return find_optimal_path(best_child, path)
-    
-    else:
-        # For chance nodes, return path with highest probability child
-        best_child = max(node.children, key=lambda c: c.probability)
-        return find_optimal_path(best_child, path)
+@dataclass
+class ExpectedValueResult:
+    """Expected value calculation result."""
+    scenarios: List[Dict[str, Any]]
+    expected_value: float
+    best_case: Dict[str, Any]
+    worst_case: Dict[str, Any]
+    risk_adjusted_return: float
 
 
-def run_monte_carlo(node: DecisionNode, simulations: int = 1000, parameters: Dict = None) -> Dict:
-    """
-    Run Monte Carlo simulation for scenario outcomes
+class DecisionEngine:
+    """Decision framework calculations."""
     
-    Args:
-        node: Root decision node
-        simulations: Number of simulations
-        parameters: Scenario parameters
-    
-    Returns:
-        Simulation results
-    """
-    results = []
-    
-    for _ in range(simulations):
-        outcome = simulate_path(node, parameters)
-        results.append(outcome)
-    
-    # Calculate statistics
-    results.sort()
-    n = len(results)
-    
-    mean = sum(results) / n
-    median = results[n // 2] if n % 2 == 1 else (results[n // 2 - 1] + results[n // 2]) / 2
-    variance = sum((x - mean) ** 2 for x in results) / n
-    std_dev = variance ** 0.5
-    
-    return {
-        "mean": round(mean, 4),
-        "median": round(median, 4),
-        "std_dev": round(std_dev, 4),
-        "min": round(min(results), 4),
-        "max": round(max(results), 4),
-        "percentiles": {
-            "5th": round(results[int(n * 0.05)], 4),
-            "25th": round(results[int(n * 0.25)], 4),
-            "75th": round(results[int(n * 0.75)], 4),
-            "95th": round(results[int(n * 0.95)], 4)
-        },
-        "simulations": simulations
-    }
-
-
-def simulate_path(node: DecisionNode, parameters: Dict = None) -> float:
-    """
-    Simulate a single path through the decision tree
-    
-    Args:
-        node: Current node
-        parameters: Scenario parameters
-    
-    Returns:
-        Outcome value
-    """
-    if not node.children:
-        # Add some randomness to terminal values
-        noise = random.gauss(0, 0.1) if parameters else 0
-        return node.value * (1 + noise)
-    
-    if node.node_type == DecisionNodeType.DECISION:
-        # Choose best child (with small randomness)
-        best_child = max(node.children, key=lambda c: calculate_expected_value(c))
-        return simulate_path(best_child, parameters)
-    
-    elif node.node_type == DecisionNodeType.CHANCE:
-        # Randomly select child based on probabilities
-        r = random.random()
-        cumulative = 0.0
-        for child in node.children:
-            cumulative += child.probability
-            if r <= cumulative:
-                return simulate_path(child, parameters)
-        return simulate_path(node.children[-1], parameters)
-    
-    return node.value
-
-
-def build_risk_matrix(impacts: List[str], probabilities: Dict[str, float]) -> List[Dict]:
-    """
-    Build risk matrix mapping scenarios to probabilities and values
-    
-    Args:
-        impacts: List of impact levels (high, medium, low)
-        probabilities: Probabilities for each impact
-    
-    Returns:
-        Risk matrix
-    """
-    matrix = []
-    impact_values = {"high": 100, "medium": 50, "low": 10}
-    
-    for impact in impacts:
-        prob = probabilities.get(impact, 0.33)
-        value = impact_values.get(impact, 50)
+    def kelly_criterion(self, edge: float, odds: float, 
+                        win_probability: Optional[float] = None) -> KellyResult:
+        """
+        Calculate Kelly criterion position sizing.
         
-        matrix.append({
-            "scenario": f"{impact}_impact",
-            "impact_level": impact,
-            "probability": prob,
-            "value": value,
-            "risk_score": round(prob * value, 2),
-            "severity": "high" if prob * value > 50 else "medium" if prob * value > 20 else "low"
-        })
+        Kelly Formula: f* = (bp - q) / b
+        Where:
+        - f* = fraction of bankroll to bet
+        - b = odds received (decimal - 1)
+        - p = probability of winning
+        - q = probability of losing (1 - p)
+        
+        Args:
+            edge: Expected edge/profit margin (e.g., 0.6 for 60%)
+            odds: Decimal odds (e.g., 2.0 for even money)
+            win_probability: Override win probability (calculated from edge if None)
+            
+        Returns:
+            KellyResult with position sizing recommendations
+        """
+        # Calculate win probability from edge if not provided
+        if win_probability is None:
+            # Simplified: edge implies win rate
+            win_probability = min(0.95, max(0.05, 0.5 + edge / 2))
+        
+        lose_probability = 1 - win_probability
+        
+        # Kelly calculation: f* = (bp - q) / b
+        # b = odds - 1 (net odds)
+        b = odds - 1
+        full_kelly = (b * win_probability - lose_probability) / b if b > 0 else 0
+        
+        # Ensure valid range
+        full_kelly = max(0, min(1, full_kelly))
+        
+        # Conservative fractions
+        half_kelly = full_kelly / 2
+        quarter_kelly = full_kelly / 4
+        
+        # Expected growth rate
+        if full_kelly > 0:
+            expected_growth = (win_probability * math.log(1 + full_kelly * b) + 
+                             lose_probability * math.log(1 - full_kelly))
+        else:
+            expected_growth = 0
+        
+        # Risk of ruin (simplified)
+        if full_kelly > 0.5:
+            risk_of_ruin = 0.3
+        elif full_kelly > 0.25:
+            risk_of_ruin = 0.1
+        else:
+            risk_of_ruin = 0.02
+        
+        return KellyResult(
+            edge=edge,
+            odds=odds,
+            win_probability=win_probability,
+            lose_probability=lose_probability,
+            full_kelly=round(full_kelly * 100, 2),
+            half_kelly=round(half_kelly * 100, 2),
+            quarter_kelly=round(quarter_kelly * 100, 2),
+            expected_growth=round(expected_growth * 100, 2),
+            risk_of_ruin=round(risk_of_ruin * 100, 2)
+        )
     
-    return matrix
+    def bayesian_inference(self, nodes_config: List[Dict], 
+                          evidence: Dict[str, bool]) -> BayesianResult:
+        """
+        Perform Bayesian network inference.
+        
+        Args:
+            nodes_config: List of node configurations
+            evidence: Observed evidence
+            
+        Returns:
+            BayesianResult with posterior probabilities
+        """
+        nodes = []
+        for config in nodes_config:
+            node = BayesianNode(
+                name=config['name'],
+                probability=config.get('probability', 0.5),
+                parents=config.get('parents', []),
+                conditional_probabilities=config.get('conditional_probabilities', {})
+            )
+            nodes.append(node)
+        
+        # Simplified inference (would use proper Bayesian network library)
+        posterior = {}
+        for node in nodes:
+            if node.name in evidence:
+                posterior[node.name] = 1.0 if evidence[node.name] else 0.0
+            else:
+                # Update based on parents
+                prob = node.probability
+                for parent in node.parents:
+                    if parent in evidence and evidence[parent]:
+                        prob = min(0.95, prob * 1.5)
+                    elif parent in evidence:
+                        prob = max(0.05, prob * 0.5)
+                posterior[node.name] = round(prob, 3)
+        
+        most_likely = max(posterior, key=posterior.get)
+        confidence = posterior[most_likely]
+        
+        return BayesianResult(
+            nodes=nodes,
+            posterior_probabilities=posterior,
+            most_likely_state=most_likely,
+            confidence=round(confidence * 100, 1)
+        )
+    
+    def monte_carlo_simulation(self, simulations: int = 10000,
+                               win_rate: float = 0.5,
+                               avg_win: float = 1.0,
+                               avg_loss: float = -1.0,
+                               initial_capital: float = 10000,
+                               bet_size: float = 0.1) -> MonteCarloResult:
+        """
+        Run Monte Carlo simulation for trading strategy.
+        
+        Args:
+            simulations: Number of simulation runs
+            win_rate: Probability of winning trade
+            avg_win: Average win amount (%)
+            avg_loss: Average loss amount (%)
+            initial_capital: Starting capital
+            bet_size: Fraction of capital per trade
+            
+        Returns:
+            MonteCarloResult with simulation statistics
+        """
+        final_returns = []
+        max_drawdowns = []
+        
+        for _ in range(simulations):
+            capital = initial_capital
+            peak = capital
+            drawdown = 0
+            trades = 100  # Simulate 100 trades
+            
+            for _ in range(trades):
+                if random.random() < win_rate:
+                    # Win
+                    capital *= (1 + bet_size * avg_win / 100)
+                else:
+                    # Loss
+                    capital *= (1 + bet_size * avg_loss / 100)
+                
+                # Track drawdown
+                if capital > peak:
+                    peak = capital
+                dd = (peak - capital) / peak
+                drawdown = max(drawdown, dd)
+            
+            final_returns.append((capital - initial_capital) / initial_capital)
+            max_drawdowns.append(drawdown)
+        
+        # Calculate statistics
+        final_returns.sort()
+        n = len(final_returns)
+        
+        avg_return = sum(final_returns) / n * 100
+        max_dd = max(max_drawdowns) * 100
+        
+        # Percentiles
+        p5_idx = int(n * 0.05)
+        p95_idx = int(n * 0.95)
+        
+        # Sharpe ratio approximation
+        returns_std = (sum((r - avg_return/100)**2 for r in final_returns) / n) ** 0.5
+        sharpe = (avg_return / 100) / returns_std if returns_std > 0 else 0
+        
+        # Probability of profit
+        profitable = sum(1 for r in final_returns if r > 0)
+        prob_profit = profitable / n * 100
+        
+        return MonteCarloResult(
+            simulations=simulations,
+            win_rate=win_rate * 100,
+            avg_return=round(avg_return, 2),
+            max_drawdown=round(max_dd, 2),
+            sharpe_ratio=round(sharpe, 2),
+            percentile_5=round(final_returns[p5_idx] * 100, 2),
+            percentile_95=round(final_returns[p95_idx] * 100, 2),
+            probability_profit=round(prob_profit, 1),
+            expected_value=round(avg_return * prob_profit / 100, 2)
+        )
+    
+    def expected_value(self, scenarios: List[Dict[str, Any]]) -> ExpectedValueResult:
+        """
+        Calculate expected value from multiple scenarios.
+        
+        Args:
+            scenarios: List of {name, probability, payoff} dictionaries
+            
+        Returns:
+            ExpectedValueResult with EV calculation
+        """
+        total_prob = sum(s['probability'] for s in scenarios)
+        
+        # Normalize probabilities if they don't sum to 1
+        if total_prob != 1.0:
+            for s in scenarios:
+                s['probability'] /= total_prob
+        
+        ev = sum(s['probability'] * s['payoff'] for s in scenarios)
+        
+        best = max(scenarios, key=lambda x: x['payoff'])
+        worst = min(scenarios, key=lambda x: x['payoff'])
+        
+        # Risk-adjusted (simple variance-based)
+        variance = sum(s['probability'] * (s['payoff'] - ev)**2 for s in scenarios)
+        risk_adj = ev / (1 + math.sqrt(variance)) if variance > 0 else ev
+        
+        return ExpectedValueResult(
+            scenarios=scenarios,
+            expected_value=round(ev, 2),
+            best_case=best,
+            worst_case=worst,
+            risk_adjusted_return=round(risk_adj, 2)
+        )
 
 
-def kelly_criterion(edge: float, odds: float) -> float:
-    """
-    Calculate Kelly criterion fraction
-    f* = (bp - q) / b
+def format_kelly(result: KellyResult, format_type: str = "text") -> str:
+    """Format Kelly result."""
+    if format_type == "json":
+        return json.dumps(asdict(result), indent=2)
     
-    Args:
-        edge: Probability of winning (0-1)
-        odds: Net odds received (profit/risk)
-    
-    Returns:
-        Optimal fraction of bankroll (0-1)
-    """
-    if odds <= 0 or edge <= 0 or edge >= 1:
-        return 0.0
-    
-    q = 1 - edge
-    kelly = (odds * edge - q) / odds
-    
-    # Use half-Kelly for safety
-    half_kelly = kelly / 2
-    
-    return max(0.0, min(half_kelly, 0.25))
+    return f"""
+╔══════════════════════════════════════════════════════════════╗
+║              KELLY CRITERION ANALYSIS                         ║
+╠══════════════════════════════════════════════════════════════╣
+  Inputs:
+    • Edge (Advantage): {result.edge:.1%}
+    • Odds: {result.odds:.2f}x
+    • Win Probability: {result.win_probability:.1%}
+  
+  📊 POSITION SIZING RECOMMENDATIONS:
+    • Full Kelly:   {result.full_kelly:.2f}% of bankroll (AGGRESSIVE)
+    • Half Kelly:   {result.half_kelly:.2f}% of bankroll (RECOMMENDED)
+    • Quarter Kelly: {result.quarter_kelly:.2f}% of bankroll (CONSERVATIVE)
+  
+  📈 EXPECTED GROWTH: {result.expected_growth:.2f}%
+  ⚠️  RISK OF RUIN: {result.risk_of_ruin:.1f}%
+  
+  💡 RECOMMENDATION:
+    Use {result.half_kelly:.2f}% (Half Kelly) for optimal 
+    growth with manageable risk.
+╚══════════════════════════════════════════════════════════════╝
+"""
 
 
-def analyze_decision(nodes: List[Dict], probabilities: Dict[str, float], 
-                     values: Dict[str, float] = None) -> Dict:
-    """
-    Complete decision analysis
+def format_bayesian(result: BayesianResult, format_type: str = "text") -> str:
+    """Format Bayesian result."""
+    if format_type == "json":
+        return json.dumps(asdict(result), indent=2, default=str)
     
-    Args:
-        nodes: Node configurations
-        probabilities: Probabilities for each node
-        values: Values for terminal nodes
+    probs = "\n".join(f"    • {k}: {v:.1%}" for k, v in result.posterior_probabilities.items())
     
-    Returns:
-        Complete analysis results
-    """
-    # Build tree
-    root = build_decision_tree(nodes, probabilities)
-    
-    if not root:
-        return {"error": "Could not build decision tree"}
-    
-    # Calculate expected values
-    ev = calculate_expected_value(root)
-    
-    # Find optimal path
-    optimal_path = find_optimal_path(root)
-    
-    # Run Monte Carlo
-    mc_results = run_monte_carlo(root, simulations=1000)
-    
-    # Build output
-    output = {
-        "decision_tree": {
-            "root": root.name,
-            "structure": serialize_tree(root)
-        },
-        "expected_value": round(ev, 4),
-        "optimal_path": optimal_path,
-        "monte_carlo": mc_results,
-        "risk_profile": {
-            "variance": mc_results["std_dev"] ** 2,
-            "worst_case": mc_results["min"],
-            "best_case": mc_results["max"],
-            "tail_risk": "high" if mc_results["percentiles"]["5th"] < -50 else "medium" if mc_results["percentiles"]["5th"] < -20 else "low"
-        },
-        "recommendations": generate_recommendations(ev, mc_results)
-    }
-    
-    return output
+    return f"""
+╔══════════════════════════════════════════════════════════════╗
+║              BAYESIAN INFERENCE RESULT                        ║
+╠══════════════════════════════════════════════════════════════╣
+  Nodes: {len(result.nodes)}
+  
+  📊 POSTERIOR PROBABILITIES:
+{probs}
+  
+  🎯 MOST LIKELY STATE: {result.most_likely_state}
+  📈 CONFIDENCE: {result.confidence:.1f}%
+╚══════════════════════════════════════════════════════════════╝
+"""
 
 
-def serialize_tree(node: DecisionNode) -> Dict:
-    """Serialize decision tree to dictionary"""
-    return {
-        "name": node.name,
-        "type": node.node_type.value,
-        "probability": node.probability,
-        "value": node.value,
-        "description": node.description,
-        "children": [serialize_tree(child) for child in node.children]
-    }
+def format_monte_carlo(result: MonteCarloResult, format_type: str = "text") -> str:
+    """Format Monte Carlo result."""
+    if format_type == "json":
+        return json.dumps(asdict(result), indent=2)
+    
+    return f"""
+╔══════════════════════════════════════════════════════════════╗
+║              MONTE CARLO SIMULATION                           ║
+╠══════════════════════════════════════════════════════════════╣
+  Simulations: {result.simulations:,}
+  Win Rate: {result.win_rate:.1f}%
+  
+  📊 RESULTS:
+    • Average Return: {result.avg_return:+.2f}%
+    • Max Drawdown: {result.max_drawdown:.2f}%
+    • Sharpe Ratio: {result.sharpe_ratio:.2f}
+    
+  📈 DISTRIBUTION:
+    • 5th Percentile: {result.percentile_5:+.2f}%
+    • 95th Percentile: {result.percentile_95:+.2f}%
+    
+  🎯 PROBABILITY OF PROFIT: {result.probability_profit:.1f}%
+  💰 EXPECTED VALUE: {result.expected_value:+.2f}%
+╚══════════════════════════════════════════════════════════════╝
+"""
 
 
-def generate_recommendations(ev: float, mc_results: Dict) -> List[str]:
-    """Generate recommendations based on analysis"""
-    recommendations = []
+def format_expected_value(result: ExpectedValueResult, format_type: str = "text") -> str:
+    """Format Expected Value result."""
+    if format_type == "json":
+        return json.dumps(asdict(result), indent=2)
     
-    if ev > 50:
-        recommendations.append("High expected value - consider aggressive strategy")
-    elif ev > 20:
-        recommendations.append("Moderate expected value - standard approach recommended")
-    elif ev > 0:
-        recommendations.append("Low expected value - proceed with caution")
-    else:
-        recommendations.append("Negative expected value - avoid this strategy")
+    scenarios_text = "\n".join(
+        f"    • {s['name']}: {s['probability']:.1%} chance → ${s['payoff']:,.2f}"
+        for s in result.scenarios
+    )
     
-    if mc_results["std_dev"] > 30:
-        recommendations.append("High variance - consider risk reduction measures")
+    return f"""
+╔══════════════════════════════════════════════════════════════╗
+║              EXPECTED VALUE ANALYSIS                          ║
+╠══════════════════════════════════════════════════════════════╣
+  SCENARIOS:
+{scenarios_text}
+  
+  📊 RESULTS:
+    • Expected Value: ${result.expected_value:,.2f}
+    • Risk-Adjusted: ${result.risk_adjusted_return:,.2f}
     
-    if mc_results["percentiles"]["5th"] < -30:
-        recommendations.append("Significant tail risk - implement stop-losses")
-    
-    recommendations.append("Use Kelly criterion for position sizing: f* = (bp-q)/b")
-    
-    return recommendations
+  🎯 BEST CASE: {result.best_case['name']} (+${result.best_case['payoff']:,.2f})
+  ⚠️  WORST CASE: {result.worst_case['name']} (${result.worst_case['payoff']:,.2f})
+╚══════════════════════════════════════════════════════════════╝
+"""
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Decision Network Builder")
-    parser.add_argument("--nodes", help="JSON array of node configurations")
-    parser.add_argument("--probabilities", help="JSON object of node probabilities")
-    parser.add_argument("--values", help="JSON object of node values")
-    parser.add_argument("--scenario", help="Scenario name")
-    parser.add_argument("--parameters", help="Scenario parameters (JSON)")
-    parser.add_argument("--monte-carlo", action="store_true", help="Run Monte Carlo simulation")
-    parser.add_argument("--risk-matrix", action="store_true", help="Build risk matrix")
-    parser.add_argument("--impacts", nargs="+", help="Impact levels for risk matrix")
-    parser.add_argument("--kelly", action="store_true", help="Calculate Kelly criterion")
-    parser.add_argument("--edge", type=float, help="Edge (win probability) for Kelly")
-    parser.add_argument("--odds", type=float, help="Odds for Kelly calculation")
+    parser = argparse.ArgumentParser(
+        description="Decision frameworks for optimal choices",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Kelly Criterion
+  %(prog)s --kelly --edge 0.6 --odds 2.0
+  
+  # Bayesian Network
+  %(prog)s --bayesian --nodes '[{"name":"bull_market","probability":0.6}]'
+  
+  # Monte Carlo
+  %(prog)s --monte-carlo --simulations 10000 --win-rate 0.55
+  
+  # Expected Value
+  %(prog)s --expected-value --scenarios '[
+      {"name":"success","probability":0.3,"payoff":10000},
+      {"name":"failure","probability":0.7,"payoff":-2000}
+  ]'
+        """
+    )
+    
+    # Framework selection
+    parser.add_argument("--kelly", action="store_true", help="Kelly criterion")
+    parser.add_argument("--bayesian", action="store_true", help="Bayesian inference")
+    parser.add_argument("--monte-carlo", action="store_true", help="Monte Carlo simulation")
+    parser.add_argument("--expected-value", "--ev", action="store_true", help="Expected value")
+    
+    # Kelly parameters
+    parser.add_argument("--edge", type=float, help="Edge/profit margin (0-1)")
+    parser.add_argument("--odds", type=float, help="Decimal odds")
+    parser.add_argument("--win-probability", type=float, help="Win probability override")
+    
+    # Bayesian parameters
+    parser.add_argument("--nodes", help="JSON node configuration")
+    parser.add_argument("--evidence", help="JSON evidence")
+    
+    # Monte Carlo parameters
+    parser.add_argument("--simulations", type=int, default=10000)
+    parser.add_argument("--win-rate", type=float, help="Trade win rate")
+    parser.add_argument("--avg-win", type=float, default=1.0)
+    parser.add_argument("--avg-loss", type=float, default=-1.0)
+    parser.add_argument("--initial-capital", type=float, default=10000)
+    parser.add_argument("--bet-size", type=float, default=0.1)
+    
+    # Expected value parameters
+    parser.add_argument("--scenarios", help="JSON scenarios array")
+    
+    # Output
+    parser.add_argument("--output", "-o", choices=["text", "json"], default="text")
     
     args = parser.parse_args()
     
-    if args.kelly and args.edge is not None and args.odds is not None:
-        kelly = kelly_criterion(args.edge, args.odds)
-        print(json.dumps({
-            "kelly_fraction": round(kelly, 4),
-            "half_kelly": round(kelly / 2, 4),
-            "recommendation": f"Allocate {round(kelly * 100, 2)}% of bankroll (or {round(kelly/2 * 100, 2)}% for safety)"
-        }, indent=2))
-        return
+    engine = DecisionEngine()
     
-    if args.risk_matrix and args.impacts:
-        probs = json.loads(args.probabilities) if args.probabilities else {}
-        matrix = build_risk_matrix(args.impacts, probs)
-        print(json.dumps({"risk_matrix": matrix}, indent=2))
-        return
+    # Run selected framework
+    if args.kelly:
+        if not args.edge or not args.odds:
+            parser.error("--kelly requires --edge and --odds")
+        result = engine.kelly_criterion(args.edge, args.odds, args.win_probability)
+        print(format_kelly(result, args.output))
+        return 0 if result.full_kelly > 0 else 1
     
-    if args.nodes:
+    elif args.bayesian:
+        if not args.nodes:
+            parser.error("--bayesian requires --nodes")
         nodes = json.loads(args.nodes)
-        probabilities = json.loads(args.probabilities) if args.probabilities else {}
-        values = json.loads(args.values) if args.values else {}
-        
-        # Merge values into nodes
-        for node in nodes:
-            if node["name"] in values:
-                node["value"] = values[node["name"]]
-        
-        result = analyze_decision(nodes, probabilities, values)
-        print(json.dumps(result, indent=2))
+        evidence = json.loads(args.evidence) if args.evidence else {}
+        result = engine.bayesian_inference(nodes, evidence)
+        print(format_bayesian(result, args.output))
+        return 0 if result.confidence > 50 else 1
+    
+    elif args.monte_carlo:
+        if not args.win_rate:
+            parser.error("--monte-carlo requires --win-rate")
+        result = engine.monte_carlo_simulation(
+            args.simulations, args.win_rate, args.avg_win,
+            args.avg_loss, args.initial_capital, args.bet_size
+        )
+        print(format_monte_carlo(result, args.output))
+        return 0 if result.probability_profit > 50 else 1
+    
+    elif args.expected_value:
+        if not args.scenarios:
+            parser.error("--expected-value requires --scenarios")
+        scenarios = json.loads(args.scenarios)
+        result = engine.expected_value(scenarios)
+        print(format_expected_value(result, args.output))
+        return 0 if result.expected_value > 0 else 1
+    
     else:
-        print(json.dumps({"error": "No nodes provided"}, indent=2))
+        parser.error("Select a framework: --kelly, --bayesian, --monte-carlo, or --expected-value")
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
