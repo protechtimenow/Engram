@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 // Cache for price data (5 second TTL)
 const priceCache = new Map<string, { price: number; timestamp: number }>();
-const CACHE_TTL = 5000; // 5 seconds
+const CACHE_TTL = 5000; // 5 seconds cache TTL
 
 interface BinancePrice {
   symbol: string;
