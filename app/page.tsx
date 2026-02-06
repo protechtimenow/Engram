@@ -54,6 +54,13 @@ function Sidebar({
             <span className="inline-block h-2 w-2 rounded-full bg-primary shadow-[0_0_10px_hsl(var(--primary))]" />
             OpenResponses v1
           </div>
+          <a 
+            href="/clawdbot"
+            className="flex items-center gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2.5 text-sm text-foreground transition-colors hover:border-primary hover:bg-muted/50"
+          >
+            <span className="inline-block h-2 w-2 rounded-full bg-cyan-500 shadow-[0_0_10px_#06b6d4]" />
+            ClawdBot (WebSocket)
+          </a>
         </div>
       </div>
 
