@@ -73,11 +73,11 @@ export default function ClawdBotPage() {
               minProtocol: 3,
               maxProtocol: 3,
               client: {
-                id: "engram-web-client",
+                id: "gateway-client",
                 displayName: "Engram Web Hub",
                 version: "1.0.0",
                 platform: "web",
-                mode: "frontend"
+                mode: "operator"
               },
               caps: ["chat"],
               auth: {
