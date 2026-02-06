@@ -23,6 +23,7 @@ export default function ClawdBotPage() {
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const isConnectingRef = useRef(false)
+  const isConnectedRef = useRef(false)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -53,7 +54,7 @@ export default function ClawdBotPage() {
     const ws = new WebSocket("ws://localhost:17500")
     
     ws.onopen = () => {
-      console.log("WebSocket opened")
+      console.log("WebSocket opened, waiting for auth challenge...")
       // Don't set connected yet - wait for authentication
     }
 
@@ -88,9 +89,10 @@ export default function ClawdBotPage() {
             }
           }
           ws.send(JSON.stringify(authMsg))
-        } else if (data.type === "res" && data.ok === true && !isConnected) {
+        } else if (data.type === "res" && data.ok === true && !isConnectedRef.current) {
           console.log("Authentication successful")
           setIsConnected(true)
+          isConnectedRef.current = true
           setIsConnecting(false)
           isConnectingRef.current = false
           setConnectionStatus("Connected")
@@ -150,6 +152,7 @@ export default function ClawdBotPage() {
     ws.onclose = (event) => {
       console.log("WebSocket closed:", event.code, event.reason)
       setIsConnected(false)
+      isConnectedRef.current = false
       setIsConnecting(false)
       isConnectingRef.current = false
       setConnectionStatus("Disconnected")
@@ -178,6 +181,7 @@ export default function ClawdBotPage() {
     wsRef.current?.close()
     wsRef.current = null
     isConnectingRef.current = false
+    isConnectedRef.current = false
   }, [])
 
   const sendMessage = useCallback(() => {
