@@ -131,6 +131,31 @@ export default function A2APage() {
   const [extractedPair, setExtractedPair] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  // Load session from localStorage on mount
+  useEffect(() => {
+    const savedSession = localStorage.getItem('a2a_debate_session')
+    const savedPair = localStorage.getItem('a2a_debate_pair')
+    if (savedSession) {
+      try {
+        setSession(JSON.parse(savedSession))
+        if (savedPair) setExtractedPair(savedPair)
+      } catch (e) {
+        console.error('Failed to load saved session:', e)
+      }
+    }
+  }, [])
+
+  // Save session to localStorage when it changes
+  useEffect(() => {
+    if (session) {
+      localStorage.setItem('a2a_debate_session', JSON.stringify(session))
+      if (extractedPair) localStorage.setItem('a2a_debate_pair', extractedPair)
+    } else {
+      localStorage.removeItem('a2a_debate_session')
+      localStorage.removeItem('a2a_debate_pair')
+    }
+  }, [session, extractedPair])
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }
@@ -191,12 +216,16 @@ export default function A2APage() {
       const data = await response.json()
       if (data.success) {
         setSession(data.session)
+      } else if (data.error === "Debate not found") {
+        // Server lost the session (in-memory storage cleared)
+        alert("Session expired. Starting a new debate...")
+        resetDebate()
       } else {
         throw new Error(data.error)
       }
     } catch (error) {
       console.error("Failed to continue debate:", error)
-      alert("Failed to send message. Check console for details.")
+      alert("Failed to send message. The session may have expired. Try starting a new debate.")
     } finally {
       setIsLoading(false)
       setFollowUp("")
@@ -210,6 +239,8 @@ export default function A2APage() {
     setFollowUp("")
     setScriptResults(null)
     setExtractedPair(null)
+    localStorage.removeItem('a2a_debate_session')
+    localStorage.removeItem('a2a_debate_pair')
   }
 
   const renderAgentMessage = (msg: DebateMessage) => {
