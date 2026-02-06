@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { exec } from "child_process";
-import { promisify } from "util";
-import * as path from "path";
-
-const execAsync = promisify(exec);
-const SCRIPTS_DIR = path.join(process.cwd(), "src", "engram", "scripts");
 
 // Cache for price data (5 second TTL)
 const priceCache = new Map<string, { price: number; timestamp: number }>();
 const CACHE_TTL = 5000; // 5 seconds
 
-async function fetchPrice(symbol: string): Promise<number | null> {
+interface BinancePrice {
+  symbol: string;
+  price: string;
+}
+
+async function fetchPriceFromBinance(symbol: string): Promise<number | null> {
   // Check cache first
   const cached = priceCache.get(symbol);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
@@ -18,21 +17,25 @@ async function fetchPrice(symbol: string): Promise<number | null> {
   }
 
   try {
-    const scriptPath = path.join(SCRIPTS_DIR, "fetch_data.py");
-    const { stdout } = await execAsync(
-      `python "${scriptPath}" --pair ${symbol} --output json`,
-      { timeout: 10000 }
-    );
+    // Call Binance API directly
+    const response = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`, {
+      headers: {
+        'Accept': 'application/json',
+      },
+    });
 
-    // Parse JSON from stdout (skip progress messages)
-    const lines = stdout.trim().split('\n');
-    const jsonStart = lines.findIndex(l => l.trim().startsWith('{'));
-    
-    if (jsonStart === -1) return null;
-    
-    const jsonStr = lines.slice(jsonStart).join('\n');
-    const data = JSON.parse(jsonStr);
-    const price = data.current_price;
+    if (!response.ok) {
+      console.error(`Binance API error for ${symbol}: ${response.status}`);
+      return null;
+    }
+
+    const data: BinancePrice = await response.json();
+    const price = parseFloat(data.price);
+
+    if (isNaN(price)) {
+      console.error(`Invalid price for ${symbol}: ${data.price}`);
+      return null;
+    }
 
     // Update cache
     priceCache.set(symbol, { price, timestamp: Date.now() });
@@ -59,14 +62,16 @@ export async function GET(request: NextRequest) {
     const symbolList = symbols.split(',').map(s => s.trim().toUpperCase());
     const results: Record<string, { price: number | null; timestamp: number; error?: string }> = {};
 
-    // Fetch all prices (could be parallelized for better performance)
-    for (const symbol of symbolList) {
-      const price = await fetchPrice(symbol);
+    // Fetch all prices in parallel
+    const pricePromises = symbolList.map(async (symbol) => {
+      const price = await fetchPriceFromBinance(symbol);
       results[symbol] = {
         price,
         timestamp: Date.now()
       };
-    }
+    });
+
+    await Promise.all(pricePromises);
 
     return NextResponse.json({
       success: true,
@@ -97,13 +102,16 @@ export async function POST(request: NextRequest) {
 
     const results: Record<string, { price: number | null; timestamp: number; error?: string }> = {};
 
-    for (const symbol of symbols) {
-      const price = await fetchPrice(symbol.toUpperCase());
+    // Fetch all prices in parallel
+    const pricePromises = symbols.map(async (symbol: string) => {
+      const price = await fetchPriceFromBinance(symbol.toUpperCase());
       results[symbol] = {
         price,
         timestamp: Date.now()
       };
-    }
+    });
+
+    await Promise.all(pricePromises);
 
     return NextResponse.json({
       success: true,
