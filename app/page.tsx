@@ -82,6 +82,13 @@ function Sidebar({
             <span className="inline-block h-2 w-2 rounded-full bg-green-500 shadow-[0_0_10px_#22c55e]" />
             Trading Dashboard
           </a>
+          <a 
+            href="/simmer"
+            className="flex items-center gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2.5 text-sm text-foreground transition-colors hover:border-primary hover:bg-muted/50"
+          >
+            <span className="inline-block h-2 w-2 rounded-full bg-orange-500 shadow-[0_0_10px_#f97316]" />
+            🔮 Simmer (Prediction Markets)
+          </a>
         </div>
       </div>
 
