@@ -73,11 +73,18 @@ function Sidebar({
           onChange={(e) => onModelChange(e.target.value)}
           className="w-full cursor-pointer rounded-xl border border-border bg-muted/30 px-3 py-2.5 font-sans text-sm text-foreground outline-none focus:border-primary"
         >
-          <option value="glm-4.7-flash">
-            GLM 4.7 Flash (OpenRouter)
-          </option>
-          <option value="openai/gpt-4o-mini">GPT-4o Mini (OpenRouter)</option>
-          <option value="custom">{"Custom Engine..."}</option>
+          <optgroup label="Fast & Cheap">
+            <option value="z-ai/glm-4.7-flash">GLM 4.7 Flash ⚡</option>
+            <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
+          </optgroup>
+          <optgroup label="Powerful">
+            <option value="anthropic/claude-opus-4.6">Claude Opus 4.6 🧠</option>
+            <option value="openai/gpt-4o">GPT-4o</option>
+          </optgroup>
+          <optgroup label="Reasoning">
+            <option value="openai/o1-mini">o1 Mini (Reasoning)</option>
+            <option value="anthropic/claude-3-5-sonnet">Claude 3.5 Sonnet</option>
+          </optgroup>
         </select>
       </div>
 
@@ -257,7 +264,7 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const [selectedModel, setSelectedModel] = useState("glm-4.7-flash")
+  const [selectedModel, setSelectedModel] = useState("z-ai/glm-4.7-flash")
   const [terminalVisible, setTerminalVisible] = useState(false)
   const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([
     { text: "opencode init --project Engram", type: "cmd" },
@@ -324,9 +331,10 @@ export default function Home() {
           "X-Title": "Engram Hub"
         },
         body: JSON.stringify({
-          model: selectedModel === "glm-4.7-flash" ? "z-ai/glm-4.7-flash" : "openai/gpt-4o-mini",
+          model: selectedModel,
           messages: allMessages,
           max_tokens: 1000,
+          ...(selectedModel.includes("claude") && { reasoning: { enabled: true } })
         }),
       })
       const data = await response.json()
