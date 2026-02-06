@@ -20,7 +20,9 @@ export default function ClawdBotPage() {
   const [isConnecting, setIsConnecting] = useState(false)
   const [connectionStatus, setConnectionStatus] = useState("Disconnected")
   const wsRef = useRef<WebSocket | null>(null)
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const isConnectingRef = useRef(false)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -31,24 +33,28 @@ export default function ClawdBotPage() {
   }, [messages])
 
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    // Prevent multiple concurrent connection attempts
+    if (isConnectingRef.current) {
+      console.log("Already connecting, skipping...")
+      return
+    }
+    
+    if (wsRef.current?.readyState === WebSocket.OPEN || 
+        wsRef.current?.readyState === WebSocket.CONNECTING) {
+      console.log("WebSocket already open or connecting, skipping...")
       return
     }
 
+    isConnectingRef.current = true
     setIsConnecting(true)
     setConnectionStatus("Connecting...")
 
+    console.log("Creating new WebSocket connection...")
     const ws = new WebSocket("ws://localhost:17500")
     
     ws.onopen = () => {
-      setIsConnected(true)
-      setIsConnecting(false)
-      setConnectionStatus("Connected")
-      setMessages(prev => [...prev, {
-        role: "system",
-        content: "Connected to ClawdBot gateway",
-        timestamp: new Date().toLocaleTimeString()
-      }])
+      console.log("WebSocket opened")
+      // Don't set connected yet - wait for authentication
     }
 
     ws.onmessage = (event) => {
@@ -57,6 +63,7 @@ export default function ClawdBotPage() {
         console.log("Received:", data)
 
         if (data.type === "event" && data.event === "connect.challenge") {
+          console.log("Got auth challenge, sending auth...")
           // Send authentication
           const authMsg = {
             type: "req",
@@ -82,11 +89,27 @@ export default function ClawdBotPage() {
           }
           ws.send(JSON.stringify(authMsg))
         } else if (data.type === "res" && data.ok === true) {
+          console.log("Authentication successful")
+          setIsConnected(true)
+          setIsConnecting(false)
+          isConnectingRef.current = false
+          setConnectionStatus("Connected")
           setMessages(prev => [...prev, {
             role: "system",
-            content: "Authentication successful",
+            content: "Connected and authenticated to ClawdBot",
             timestamp: new Date().toLocaleTimeString()
           }])
+        } else if (data.type === "res" && data.ok === false) {
+          console.error("Authentication failed:", data)
+          setConnectionStatus("Auth Failed")
+          setIsConnecting(false)
+          isConnectingRef.current = false
+          setMessages(prev => [...prev, {
+            role: "system",
+            content: `Authentication failed: ${data.error?.message || "Unknown error"}`,
+            timestamp: new Date().toLocaleTimeString()
+          }])
+          ws.close()
         } else if (data.type === "ping") {
           // Send pong
           ws.send(JSON.stringify({
@@ -102,6 +125,9 @@ export default function ClawdBotPage() {
             content: content,
             timestamp: new Date().toLocaleTimeString()
           }])
+        } else if (data.type === "event") {
+          // Handle other events
+          console.log("Event received:", data.event)
         }
       } catch (err) {
         console.error("Error parsing message:", err)
@@ -112,25 +138,40 @@ export default function ClawdBotPage() {
       console.error("WebSocket error:", error)
       setConnectionStatus("Error")
       setIsConnecting(false)
+      isConnectingRef.current = false
     }
 
-    ws.onclose = () => {
+    ws.onclose = (event) => {
+      console.log("WebSocket closed:", event.code, event.reason)
       setIsConnected(false)
       setIsConnecting(false)
+      isConnectingRef.current = false
       setConnectionStatus("Disconnected")
-      setMessages(prev => [...prev, {
-        role: "system",
-        content: "Disconnected from ClawdBot",
-        timestamp: new Date().toLocaleTimeString()
-      }])
+      
+      // Only add disconnect message if we were previously connected
+      if (wsRef.current) {
+        setMessages(prev => [...prev, {
+          role: "system",
+          content: `Disconnected from ClawdBot (code: ${event.code})`,
+          timestamp: new Date().toLocaleTimeString()
+        }])
+      }
+      
+      wsRef.current = null
     }
 
     wsRef.current = ws
   }, [])
 
   const disconnect = useCallback(() => {
+    console.log("Disconnecting...")
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current)
+      reconnectTimeoutRef.current = null
+    }
     wsRef.current?.close()
     wsRef.current = null
+    isConnectingRef.current = false
   }, [])
 
   const sendMessage = useCallback(() => {
@@ -159,6 +200,7 @@ export default function ClawdBotPage() {
         }
       }
     }
+    console.log("Sending message:", chatMsg)
     wsRef.current.send(JSON.stringify(chatMsg))
   }, [input, isConnected])
 
@@ -168,6 +210,13 @@ export default function ClawdBotPage() {
       sendMessage()
     }
   }
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      disconnect()
+    }
+  }, [disconnect])
 
   return (
     <div className="flex h-screen flex-col bg-[#050505] text-gray-200">
@@ -191,15 +240,16 @@ export default function ClawdBotPage() {
           </div>
           <button
             onClick={isConnected ? disconnect : connect}
+            disabled={isConnecting}
             className={cn(
-              "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors",
+              "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50",
               isConnected 
                 ? "bg-red-500/20 text-red-400 hover:bg-red-500/30" 
                 : "bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30"
             )}
           >
             <Power className="h-4 w-4" />
-            {isConnected ? "Disconnect" : "Connect"}
+            {isConnecting ? "Connecting..." : isConnected ? "Disconnect" : "Connect"}
           </button>
         </div>
       </header>
