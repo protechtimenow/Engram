@@ -3,14 +3,18 @@
 Market Analysis Script - Engram Neural Core
 Advanced technical analysis with Fibonacci, pivot points, ATR, and trend analysis.
 
+Can use REAL market data from Binance API or simulated data for testing.
+
 Usage:
     python analyze_market.py --pair BTC/USD --timeframe 1h
     python analyze_market.py --pair ETH/USD --price 2500 --output json
+    python analyze_market.py --pair BTCUSDT --live-data  # Fetch real data
 """
 
 import argparse
 import json
 import sys
+import subprocess
 from typing import Dict, Any, Optional, List
 from dataclasses import dataclass, asdict
 
@@ -213,42 +217,42 @@ def format_output(analysis: MarketAnalysis, format_type: str = "text") -> str:
     
     # Text format
     output = f"""
-╔══════════════════════════════════════════════════════════════════╗
-║              MARKET ANALYSIS: {analysis.pair:>20}              ║
-╠══════════════════════════════════════════════════════════════════╣
++==================================================================+
+|              MARKET ANALYSIS: {analysis.pair:>20}              |
+|==================================================================|
   Price: ${analysis.current_price:>15,.2f}    Timeframe: {analysis.timeframe}
   Trend: {analysis.trend:>15}    Strength: {analysis.trend_strength:.0%}
   Confidence: {analysis.confidence:.1f}%
   
-  📊 PIVOT POINTS:
+  [CHART] PIVOT POINTS:
     Pivot: ${analysis.pivot_points['pivot']:>12,.2f}
     R1:    ${analysis.pivot_points['r1']:>12,.2f}    S1: ${analysis.pivot_points['s1']:>12,.2f}
     R2:    ${analysis.pivot_points['r2']:>12,.2f}    S2: ${analysis.pivot_points['s2']:>12,.2f}
     R3:    ${analysis.pivot_points['r3']:>12,.2f}    S3: ${analysis.pivot_points['s3']:>12,.2f}
   
-  📈 FIBONACCI LEVELS ({'Uptrend' if analysis.trend == 'BULLISH' else 'Downtrend'}):
+  [TREND] FIBONACCI LEVELS ({'Uptrend' if analysis.trend == 'BULLISH' else 'Downtrend'}):
     0.0%:  ${analysis.fibonacci_levels['fib_0']:>12,.2f}
     23.6%: ${analysis.fibonacci_levels['fib_236']:>12,.2f}
     38.2%: ${analysis.fibonacci_levels['fib_382']:>12,.2f}
     50.0%: ${analysis.fibonacci_levels['fib_500']:>12,.2f}
-    61.8%: ${analysis.fibonacci_levels['fib_618']:>12,.2f} ⭐
+    61.8%: ${analysis.fibonacci_levels['fib_618']:>12,.2f} *
     78.6%: ${analysis.fibonacci_levels['fib_786']:>12,.2f}
     100%:  ${analysis.fibonacci_levels['fib_100']:>12,.2f}
   
-  📉 ATR ({analysis.timeframe}): ${analysis.atr:,.2f} ({analysis.atr_percent:.2f}%)
+  [VOL] ATR ({analysis.timeframe}): ${analysis.atr:,.2f} ({analysis.atr_percent:.2f}%)
   
-  🎯 KEY LEVELS:
+  [TARGET] KEY LEVELS:
     Support:    {', '.join(f'${s:,.2f}' for s in analysis.support_levels[:3])}
     Resistance: {', '.join(f'${r:,.2f}' for r in analysis.resistance_levels[:3])}
   
-  🔍 OBSERVATIONS:
-    {chr(10).join('    • ' + obs for obs in analysis.key_observations[:4])}
+  [INFO] OBSERVATIONS:
+    {chr(10).join('    - ' + obs for obs in analysis.key_observations[:4])}
   
-  ⚠️  RISKS:
-    {chr(10).join('    • ' + risk for risk in analysis.risk_factors)}
+  [WARN]  RISKS:
+    {chr(10).join('    - ' + risk for risk in analysis.risk_factors)}
   
-  💡 RECOMMENDATION: {analysis.recommendation}
-╚══════════════════════════════════════════════════════════════════╝
+  [IDEA] RECOMMENDATION: {analysis.recommendation}
++==================================================================+
 """
     return output
 
@@ -305,11 +309,47 @@ Examples:
         default="text",
         help="Output format"
     )
+    parser.add_argument(
+        "--live-data", "-l",
+        action="store_true",
+        help="Fetch real market data from Binance API"
+    )
     
     args = parser.parse_args()
     
     # Determine price
     price = args.price
+    live_data = None
+    
+    if args.live_data:
+        # Fetch real data from Binance
+        print(f"Fetching live data for {args.pair}...", file=sys.stderr)
+        symbol = args.pair.upper().replace("/", "")
+        try:
+            result = subprocess.run(
+                [sys.executable, "fetch_data.py", "--pair", symbol, "--interval", args.timeframe, "--output", "json"],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            # Parse stdout, find the JSON part (skip progress messages)
+            output_lines = result.stdout.strip().split('\n')
+            json_start = None
+            for i, line in enumerate(output_lines):
+                if line.strip().startswith('{'):
+                    json_start = i
+                    break
+            
+            if json_start is not None:
+                json_str = '\n'.join(output_lines[json_start:])
+                live_data = json.loads(json_str)
+                price = live_data.get('current_price', price)
+                print(f"Live price: ${price:,.2f}", file=sys.stderr)
+            else:
+                print(f"Warning: No JSON data in response, using fallback", file=sys.stderr)
+        except Exception as e:
+            print(f"Warning: Live data fetch failed: {e}", file=sys.stderr)
+    
     if not price and args.context:
         price = extract_price(args.context)
     if not price:
