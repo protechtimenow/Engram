@@ -1,15 +1,21 @@
 {
-  "lmstudio": {
-    "host": "100.118.172.23",
-    "port": 1234,
-    "model": "glm-4.7-flash",
+  "provider": "openrouter",
+  "model": "stepfun/step-3.5-flash:free",
+  "openrouter": {
+    "api_base": "https://openrouter.ai/api/v1",
     "timeout": 60,
     "max_retries": 3
   },
+  "stepfun": {
+    "api_base": "https://api.stepfun.ai/v1",
+    "timeout": 60,
+    "max_retries": 3,
+    "model": "step-3.5-flash"
+  },
   "clawdbot": {
     "host": "localhost",
-    "port": 18789,
-    "token": "",
+    "port": 17500,
+    "token": "2a965e2334ac2b0a9d4d255f86e479db5a3b75a992affbdc",
     "reconnect_delay": 1,
     "max_reconnect_delay": 60,
     "ping_interval": 30
@@ -61,6 +67,13 @@
     "level": "INFO",
     "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     "file": "logs/engram.log"
+  },
+  "models": {
+    "available": [
+      "z-ai/glm-4.7-flash",
+      "stepfun/step-3.5-flash:free"
+    ],
+    "default": "stepfun/step-3.5-flash:free"
   },
   "platforms": {
     "telegram": {

@@ -1,0 +1,14 @@
+{
+  "system": {
+    "mode": "smart"
+  },
+  "freqtrade": {
+    "dry_run": true
+  },
+  "telegram": {
+    "enabled": true
+  },
+  "integrations": {
+    "enabled": true
+  }
+}

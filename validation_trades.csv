@@ -1,0 +1,4 @@
+trade_id,timestamp,symbol,side,quantity,entry_price,exit_price,pnl,pnl_percent,emotion_tag,risk_level,edge_percent,market,strategy,notes
+SIM-1001,2026-02-03T12:33:02.106978,GC,BUY,1,2040.0,2045.0,500.0,0.25,confident,medium,25.0,FUTURES,Breakout,"Edge detected, executed"
+SIM-1002,2026-02-03T13:33:02.106978,SI,BUY,10,23.5,23.2,-300.0,-1.28,neutral,medium,15.0,FUTURES,MeanReversion,Stopped out
+SIM-1003,2026-02-03T14:33:02.106978,ES,SELL,1,5850.0,,,,patient,low,30.0,FUTURES,TrendFollowing,Open position

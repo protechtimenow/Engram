@@ -1,0 +1,114 @@
+{
+    "provider":  "openrouter",
+    "model":  "z-ai/glm-4.7-flash",
+    "openrouter":  {
+                       "api_base":  "https://openrouter.ai/api/v1",
+                       "timeout":  15,
+                       "max_retries":  1,
+                       "stream":  true
+                   },
+    "stepfun":  {
+                    "api_base":  "https://api.stepfun.ai/v1",
+                    "timeout":  15,
+                    "max_retries":  1,
+                    "model":  "step-1-8k",
+                    "stream":  true
+                },
+    "clawdbot":  {
+                     "host":  "localhost",
+                     "port":  17500,
+                     "token":  "2a965e2334ac2b0a9d4d255f86e479db5a3b75a992affbdc",
+                     "reconnect_delay":  0.5,
+                     "max_reconnect_delay":  10,
+                     "ping_interval":  10,
+                     "fast_mode":  true,
+                     "response_buffer_ms":  50
+                 },
+    "agent":  {
+                  "id":  "engram",
+                  "name":  "Engram Trading Assistant",
+                  "version":  "1.0.0-fast",
+                  "response_format":  "stream",
+                  "typing_indicator":  false,
+                  "cache_memory":  true,
+                  "mind_modality":  {
+                                        "enabled":  true,
+                                        "context_window":  10,
+                                        "memory_ttl_seconds":  300,
+                                        "quick_recall":  true
+                                    }
+              },
+    "trading":  {
+                    "default_timeframe":  "1h",
+                    "risk_tolerance":  "medium",
+                    "max_position_size":  10000,
+                    "supported_pairs":  [
+                                            "BTC/USD",
+                                            "ETH/USD",
+                                            "EUR/USD",
+                                            "GBP/USD",
+                                            "XAU/USD"
+                                        ]
+                },
+    "analysis":  {
+                     "indicators":  {
+                                        "rsi":  {
+                                                    "enabled":  true,
+                                                    "period":  14,
+                                                    "overbought":  70,
+                                                    "oversold":  30
+                                                },
+                                        "macd":  {
+                                                     "enabled":  true,
+                                                     "fast_period":  12,
+                                                     "slow_period":  26,
+                                                     "signal_period":  9
+                                                 },
+                                        "moving_averages":  {
+                                                                "enabled":  true,
+                                                                "periods":  [
+                                                                                20,
+                                                                                50,
+                                                                                200
+                                                                            ]
+                                                            }
+                                    },
+                     "confidence_thresholds":  {
+                                                   "high":  0.8,
+                                                   "medium":  0.6,
+                                                   "low":  0.4
+                                               }
+                 },
+    "logging":  {
+                    "level":  "WARNING",
+                    "format":  "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+                    "file":  "logs/engram.log"
+                },
+    "models":  {
+                   "available":  [
+                                     "z-ai/glm-4.7-flash",
+                                     "stepfun/step-3.5-flash:free"
+                                 ],
+                   "default":  "z-ai/glm-4.7-flash",
+                   "fast_mode":  true
+               },
+    "platforms":  {
+                      "telegram":  {
+                                       "enabled":  false,
+                                       "bot_token":  "",
+                                       "allowed_users":  [
+
+                                                         ]
+                                   },
+                      "websocket":  {
+                                        "enabled":  true,
+                                        "subprotocol":  "clawdbot-v1",
+                                        "heartbeat_interval":  10,
+                                        "fast_reconnect":  true
+                                    },
+                      "http":  {
+                                   "enabled":  false,
+                                   "port":  8080
+                               }
+                  }
+}

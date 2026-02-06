@@ -1,0 +1,96 @@
+{
+  "timestamp": "2026-02-03T14:33:04.163809",
+  "results": [
+    {
+      "test_name": "Feed Validation",
+      "passed": false,
+      "details": {
+        "total_ticks": 0,
+        "sources": [],
+        "symbols": []
+      },
+      "timestamp": "2026-02-03T14:32:46.666937"
+    },
+    {
+      "test_name": "Neural Core / Edge Detection",
+      "passed": true,
+      "details": {
+        "signals_generated": 1,
+        "signal_types": [
+          "BUY"
+        ],
+        "avg_confidence": 0.77
+      },
+      "timestamp": "2026-02-03T14:33:02.106978"
+    },
+    {
+      "test_name": "Risk Management",
+      "passed": true,
+      "details": {
+        "kelly_full": 0.25,
+        "kelly_half": 0.125,
+        "correlations": {
+          "GC": {
+            "SI": 0.85,
+            "CL": -0.15,
+            "ES": 0.25
+          },
+          "SI": {
+            "GC": 0.85,
+            "CL": -0.1,
+            "ES": 0.2
+          },
+          "ES": {
+            "NQ": 0.92,
+            "GC": 0.25,
+            "SI": 0.2
+          }
+        },
+        "max_position_size": 0.25
+      },
+      "timestamp": "2026-02-03T14:33:02.106978"
+    },
+    {
+      "test_name": "CSV Export / Performance",
+      "passed": true,
+      "details": {
+        "total_trades": 3,
+        "futures_trades": 3,
+        "export_success": true,
+        "summary": {
+          "total_trades": 3,
+          "closed_trades": 2,
+          "symbols": [
+            "ES",
+            "GC",
+            "SI"
+          ],
+          "markets": [
+            "FUTURES"
+          ],
+          "date_range": {
+            "start": "2026-02-03T12:33:02.106978",
+            "end": "2026-02-03T14:33:02.106978"
+          }
+        }
+      },
+      "timestamp": "2026-02-03T14:33:02.118568"
+    },
+    {
+      "test_name": "Encryption",
+      "passed": true,
+      "details": {
+        "original": "GC:2045.50:100",
+        "encrypted_length": 28,
+        "decryption_match": true
+      },
+      "timestamp": "2026-02-03T14:33:02.118568"
+    }
+  ],
+  "test_data": {
+    "ticks": [],
+    "signals": [],
+    "trades": [],
+    "performance": {}
+  }
+}

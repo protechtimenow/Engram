@@ -35,7 +35,17 @@ class EngramAgent:
             config: Configuration dictionary
         """
         self.config = config
-        self.skill = EngramSkill(config)
+        
+        # Pass config to skill with provider selection
+        skill_config = {
+            "model": config.get("model", "step-3.5-flash"),
+            "provider": config.get("provider", "stepfun"),
+            "openrouter_api_key": config.get("openrouter_api_key") or os.getenv("OPENROUTER_API_KEY"),
+            "stepfun_api_key": config.get("stepfun_api_key") or os.getenv("STEPFUN_API_KEY"),
+            "response_format": config.get("response_format", "clean")
+        }
+        self.skill = EngramSkill(skill_config)
+        
         self.websocket: Optional[websockets.WebSocketClientProtocol] = None
         self.running = False
         self.reconnect_delay = 1
@@ -68,15 +78,17 @@ class EngramAgent:
         """
         # Use token from ClawdBot config
         token = self.gateway_token or "2a965e2334ac2b0a9d4d255f86e479db5a3b75a992affbdc"
-        uri = f"ws://{self.gateway_host}:{self.gateway_port}?token={token}"
+        # OpenClaw gateway validates token from connect message, not URL
+        uri = f"ws://{self.gateway_host}:{self.gateway_port}"
         
         try:
-            logger.info(f"Attempting connection to {uri[:50]}...")
+            logger.info(f"Attempting connection to ws://{self.gateway_host}:{self.gateway_port}")
             
-            # Connect without subprotocols - ClawdBot doesn't use them
-            self.websocket = await websockets.connect(uri)
+            # Connect without subprotocols - OpenClaw doesn't use them
+            # Add timeout to prevent indefinite hanging
+            self.websocket = await asyncio.wait_for(websockets.connect(uri), timeout=10)
             
-            logger.info(f"[OK] Connected to ClawdBot gateway")
+            logger.info(f"[OK] Connected to OpenClaw gateway")
             
             # Handle authentication challenge-response
             if await self._authenticate():
@@ -112,6 +124,7 @@ class EngramAgent:
             if data.get("type") == "event" and data.get("event") == "connect.challenge":
                 nonce = data.get("payload", {}).get("nonce")
                 token = self.gateway_token or "2a965e2334ac2b0a9d4d255f86e479db5a3b75a992affbdc"
+                logger.debug(f"Using token: {token[:10]}...{token[-10:]} (length: {len(token)})")
                 
                 # Send connect request with proper ClawdBot protocol
                 connect_msg = {
@@ -380,7 +393,8 @@ Examples:
         status_lines = [
             "[Bot Status]",
             f"Status: {health.get('status', 'unknown').upper()}",
-            f"LMStudio: {'[OK]' if health.get('lmstudio') else '[ERROR]'}",
+            f"AI Provider: OpenRouter",
+            f"Model: {self.config.get('model', 'openai/gpt-4o-mini')}",
             f"Tools: {health.get('tools_registered', 0)} registered",
             f"Active Alerts: {sum(len(alerts) for alerts in self.price_alerts.values())}",
             f"Portfolio Items: {len(self.portfolio)}",
@@ -545,9 +559,8 @@ async def main():
     """Main entry point for standalone agent"""
     # Load configuration from environment
     config = {
-        "lmstudio_host": os.getenv("LMSTUDIO_HOST", "100.118.172.23"),
-        "lmstudio_port": int(os.getenv("LMSTUDIO_PORT", "1234")),
-        "model": os.getenv("ENGRAM_MODEL", "glm-4.7-flash"),
+        "openrouter_api_key": os.getenv("OPENROUTER_API_KEY", ""),
+        "model": os.getenv("ENGRAM_MODEL", "openai/gpt-4o-mini"),
         "clawdbot_host": os.getenv("CLAWDBOT_HOST", "localhost"),
         "clawdbot_port": int(os.getenv("CLAWDBOT_PORT", "18789")),
         "clawdbot_token": os.getenv("CLAWDBOT_TOKEN", ""),

@@ -1,13 +1,16 @@
 """
 Engram Trading Analysis Skill
-Provides market analysis, signal generation, and risk assessment capabilities
+Provides market analysis, signal generation, and risk assessment
+Supports multiple AI providers: OpenRouter, StepFun (direct)
 """
 
 import logging
+import os
 from typing import Dict, List, Any, Optional
 from datetime import datetime
 
-from .lmstudio_client import LMStudioClient
+from .openrouter_client import OpenRouterClient
+from .stepfun_client import StepFunClient
 from .tools import (
     analyze_market,
     generate_signal,
@@ -22,6 +25,7 @@ logger = logging.getLogger(__name__)
 class EngramSkill:
     """
     ClawdBot skill for Engram trading analysis
+    Supports multiple AI providers: OpenRouter, StepFun (direct)
     """
     
     def __init__(self, config: Dict[str, Any]):
@@ -29,25 +33,53 @@ class EngramSkill:
         Initialize Engram skill
         
         Args:
-            config: Configuration dictionary with LMStudio settings
+            config: Configuration dictionary with model settings
         """
         self.config = config
-        self.lmstudio = LMStudioClient(
-            host=config.get("lmstudio_host", "localhost"),
-            port=config.get("lmstudio_port", 1234),
-            model=config.get("model", "glm-4.7-flash")
-        )
         self.response_format = config.get("response_format", "clean")
+        
+        # Initialize clients based on configuration
+        self.openrouter_client = None
+        self.stepfun_client = None
+        self.active_client = None
+        self.active_provider = None
+        
+        # Determine which provider to use
+        # GLM 4.7 Flash from Zhipu AI - integrated with Engram mind (PRIMARY)
+        provider = config.get("provider", "auto").lower()
+        model = config.get("model", "z-ai/glm-4.7-flash")
+        
+        # Initialize OpenRouter client (PRIMARY - for GLM 4.7 Flash)
+        openrouter_key = config.get("openrouter_api_key") or os.getenv("OPENROUTER_API_KEY")
+        if openrouter_key:
+            self.openrouter_client = OpenRouterClient(
+                model=model,
+                api_key=openrouter_key
+            )
+            self.active_client = self.openrouter_client
+            self.active_provider = "openrouter"
+            logger.info(f"Engram skill initialized with OpenRouter: {model}")
+        
+        # Initialize StepFun client via OpenRouter (FALLBACK)
+        stepfun_model = os.getenv("STEPFUN_MODEL", "stepfun/step-3.5-flash:free")
+        if openrouter_key:
+            self.stepfun_client = OpenRouterClient(
+                model=stepfun_model,
+                api_key=openrouter_key
+            )
+            logger.info(f"StepFun fallback configured via OpenRouter: {stepfun_model}")
+        
+        # If no client is active, use OpenRouter as default (will fail gracefully)
+        if not self.active_client:
+            self.openrouter_client = OpenRouterClient(model=model)
+            self.active_client = self.openrouter_client
+            self.active_provider = "openrouter"
+            logger.warning("No API keys configured - skill will run in demo mode")
+        
         self.tools = self._register_tools()
-        logger.info("Engram skill initialized")
     
     def _register_tools(self) -> List[Dict[str, Any]]:
-        """
-        Register available tools for function calling
-        
-        Returns:
-            List of tool schemas in OpenAI format
-        """
+        """Register available tools for function calling"""
         return [
             {
                 "type": "function",
@@ -138,22 +170,11 @@ class EngramSkill:
         ]
     
     async def process_message(self, message: str, context: Optional[Dict] = None) -> str:
-        """
-        Process user message and generate response
-        
-        Args:
-            message: User message
-            context: Optional context (platform, user_id, etc.)
-            
-        Returns:
-            Response string
-        """
+        """Process user message and generate response"""
         try:
-            # Build system prompt
             system_prompt = self._build_system_prompt()
             
-            # Query LMStudio with tools
-            response = await self.lmstudio.chat_completion(
+            response = await self.active_client.chat_completion(
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": message}
@@ -164,8 +185,7 @@ class EngramSkill:
             # Handle tool calls if present
             if response.get("tool_calls"):
                 tool_results = await self._execute_tools(response["tool_calls"])
-                # Get final response with tool results
-                final_response = await self.lmstudio.chat_completion(
+                final_response = await self.active_client.chat_completion(
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": message},
@@ -179,18 +199,10 @@ class EngramSkill:
             
         except Exception as e:
             logger.error(f"Error processing message: {e}")
-            return f"I encountered an error analyzing the market. Please try again."
+            return f"[ERROR] {str(e)}"
     
     async def _execute_tools(self, tool_calls: List[Dict]) -> List[Dict]:
-        """
-        Execute tool calls and return results
-        
-        Args:
-            tool_calls: List of tool call objects
-            
-        Returns:
-            List of tool result messages
-        """
+        """Execute tool calls and return results"""
         results = []
         
         for tool_call in tool_calls:
@@ -198,7 +210,6 @@ class EngramSkill:
             arguments = tool_call["function"]["arguments"]
             
             try:
-                # Execute the appropriate tool
                 if function_name == "analyze_market":
                     result = await analyze_market(**arguments)
                 elif function_name == "generate_signal":
@@ -227,12 +238,7 @@ class EngramSkill:
         return results
     
     def _build_system_prompt(self) -> str:
-        """
-        Build system prompt for Engram
-        
-        Returns:
-            System prompt string
-        """
+        """Build system prompt for Engram"""
         return """You are Engram, an advanced neural trading analysis assistant.
 
 Your capabilities include:
@@ -252,57 +258,56 @@ Analysis:
 [Brief technical and fundamental analysis]
 
 Suggestions:
-• [Actionable suggestion 1]
-• [Actionable suggestion 2]
-• [Actionable suggestion 3]
+- [Actionable suggestion 1]
+- [Actionable suggestion 2]
+- [Actionable suggestion 3]
 
 Always be clear, concise, and professional. Focus on data-driven insights."""
     
     def _format_response(self, content: str) -> str:
-        """
-        Format response based on configured format
-        
-        Args:
-            content: Raw response content
-            
-        Returns:
-            Formatted response
-        """
+        """Format response based on configured format"""
         if self.response_format == "raw":
             return content
         
         if self.response_format == "detailed":
-            return f"[Engram Analysis - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}]\n\n{content}"
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            return f"[Engram Analysis - {timestamp}]\n\n{content}"
         
         # Clean format (default)
-        # Remove any reasoning tags or metadata
         lines = content.split('\n')
         clean_lines = [line for line in lines if not line.strip().startswith(('<think>', '</think>', 'reasoning:'))]
         return '\n'.join(clean_lines).strip()
     
     async def health_check(self) -> Dict[str, Any]:
-        """
-        Check skill health status
+        """Check skill health status"""
+        result = {
+            "status": "unknown",
+            "provider": self.active_provider,
+            "model": self.active_client.model if self.active_client else "none",
+            "tools_registered": len(self.tools),
+            "response_format": self.response_format
+        }
         
-        Returns:
-            Health status dictionary
-        """
         try:
-            lmstudio_status = await self.lmstudio.health_check()
-            return {
-                "status": "healthy" if lmstudio_status else "degraded",
-                "lmstudio": lmstudio_status,
-                "tools_registered": len(self.tools),
-                "response_format": self.response_format
-            }
+            if self.active_client:
+                client_status = await self.active_client.health_check()
+                result["status"] = "healthy" if client_status.get("healthy") else "degraded"
+                result[self.active_provider] = client_status
+            else:
+                result["status"] = "unhealthy"
+                result["error"] = "No active client"
+                
         except Exception as e:
             logger.error(f"Health check failed: {e}")
-            return {
-                "status": "unhealthy",
-                "error": str(e)
-            }
+            result["status"] = "unhealthy"
+            result["error"] = str(e)
+        
+        return result
     
     async def shutdown(self):
         """Clean shutdown of skill resources"""
-        await self.lmstudio.close()
+        if self.openrouter_client:
+            await self.openrouter_client.close()
+        if self.stepfun_client:
+            await self.stepfun_client.close()
         logger.info("Engram skill shutdown complete")
