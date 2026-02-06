@@ -60,7 +60,7 @@ export default function ClawdBotPage() {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
-        console.log("Received:", data)
+        console.log("Received:", JSON.stringify(data, null, 2))
 
         if (data.type === "event" && data.event === "connect.challenge") {
           console.log("Got auth challenge, sending auth...")
@@ -88,7 +88,7 @@ export default function ClawdBotPage() {
             }
           }
           ws.send(JSON.stringify(authMsg))
-        } else if (data.type === "res" && data.ok === true) {
+        } else if (data.type === "res" && data.ok === true && !isConnected) {
           console.log("Authentication successful")
           setIsConnected(true)
           setIsConnecting(false)
@@ -117,15 +117,19 @@ export default function ClawdBotPage() {
             data: data.data,
             timestamp: new Date().toISOString()
           }))
-        } else if (data.type === "res" && data.ok === true && data.payload) {
-          // Received response from bot
-          const content = data.payload.message || data.payload.content || ""
-          if (content) {
-            setMessages(prev => [...prev, {
-              role: "assistant",
-              content: content,
-              timestamp: new Date().toLocaleTimeString()
-            }])
+        } else if (data.type === "res") {
+          console.log("Got response:", data)
+          if (data.ok === true && data.payload) {
+            // Received response from bot
+            const content = data.payload.message || data.payload.content || ""
+            console.log("Response content:", content)
+            if (content) {
+              setMessages(prev => [...prev, {
+                role: "assistant",
+                content: content,
+                timestamp: new Date().toLocaleTimeString()
+              }])
+            }
           }
         } else if (data.type === "event") {
           // Handle other events
