@@ -12,14 +12,28 @@ import {
   RotateCcw,
   Brain,
   Scale,
-  Target
+  Target,
+  Terminal,
+  ChevronDown,
+  ChevronUp,
+  Code2,
+  BarChart3,
+  Shield,
+  Calculator
 } from "lucide-react"
+
+interface ScriptData {
+  marketAnalysis?: any
+  confidenceScore?: any
+  kellyCalculation?: any
+}
 
 interface DebateMessage {
   role: "user" | "assistant"
   content: string
   agent?: "proposer" | "critic" | "consensus"
   timestamp: string
+  scriptData?: any
 }
 
 interface DebateSession {
@@ -27,6 +41,7 @@ interface DebateSession {
   topic: string
   messages: DebateMessage[]
   status: "active" | "completed"
+  extractedPair?: string
 }
 
 const AGENT_CONFIG = {
@@ -38,7 +53,9 @@ const AGENT_CONFIG = {
     bgColor: "bg-purple-500/10",
     borderColor: "border-purple-500/30",
     textColor: "text-purple-400",
-    description: "Builds the initial trading strategy"
+    description: "Builds the initial trading strategy",
+    scriptIcon: BarChart3,
+    scriptName: "analyze_market.py"
   },
   critic: {
     name: "Critic", 
@@ -48,7 +65,9 @@ const AGENT_CONFIG = {
     bgColor: "bg-amber-500/10",
     borderColor: "border-amber-500/30",
     textColor: "text-amber-400",
-    description: "Challenges assumptions & finds risks"
+    description: "Challenges assumptions & finds risks",
+    scriptIcon: Shield,
+    scriptName: "confidence_scoring.py"
   },
   consensus: {
     name: "Consensus",
@@ -58,8 +77,48 @@ const AGENT_CONFIG = {
     bgColor: "bg-cyan-500/10",
     borderColor: "border-cyan-500/30",
     textColor: "text-cyan-400",
-    description: "Synthesizes final recommendation"
+    description: "Synthesizes final recommendation",
+    scriptIcon: Calculator,
+    scriptName: "decision_nets.py"
   }
+}
+
+// Script Results Panel Component
+function ScriptResultsPanel({ data, agent }: { data: any; agent: string }) {
+  const [isExpanded, setIsExpanded] = useState(false)
+  
+  if (!data) return null
+  
+  const config = AGENT_CONFIG[agent as keyof typeof AGENT_CONFIG]
+  const ScriptIcon = config?.scriptIcon || Code2
+  
+  return (
+    <div className="mt-3 rounded-lg border border-gray-700/50 bg-gray-900/50">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex w-full items-center justify-between px-3 py-2 text-left text-xs text-gray-400 hover:text-gray-300"
+      >
+        <div className="flex items-center gap-2">
+          <ScriptIcon className="h-3 w-3" />
+          <span>Script: {config?.scriptName}</span>
+          {data.error ? (
+            <span className="text-red-400">(error)</span>
+          ) : (
+            <span className="text-green-400">(success)</span>
+          )}
+        </div>
+        {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+      </button>
+      
+      {isExpanded && (
+        <div className="border-t border-gray-700/50 px-3 py-2">
+          <pre className="max-h-48 overflow-auto text-xs text-gray-500">
+            {JSON.stringify(data, null, 2)}
+          </pre>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function A2APage() {
@@ -68,6 +127,8 @@ export default function A2APage() {
   const [isLoading, setIsLoading] = useState(false)
   const [session, setSession] = useState<DebateSession | null>(null)
   const [followUp, setFollowUp] = useState("")
+  const [scriptResults, setScriptResults] = useState<ScriptData | null>(null)
+  const [extractedPair, setExtractedPair] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const scrollToBottom = () => {
@@ -82,6 +143,7 @@ export default function A2APage() {
     if (!topic.trim() || isLoading) return
     
     setIsLoading(true)
+    setScriptResults(null)
     try {
       const response = await fetch("/api/a2a/debate", {
         method: "POST",
@@ -89,13 +151,16 @@ export default function A2APage() {
         body: JSON.stringify({
           action: "start",
           topic: topic.trim(),
-          context: context.trim() || undefined
+          context: context.trim() || undefined,
+          useScripts: true
         })
       })
 
       const data = await response.json()
       if (data.success) {
         setSession(data.session)
+        setExtractedPair(data.extractedPair || null)
+        setScriptResults(data.results?.scriptResults || null)
       } else {
         throw new Error(data.error)
       }
@@ -118,14 +183,14 @@ export default function A2APage() {
         body: JSON.stringify({
           action: "continue",
           debateId: session.id,
-          message: followUp.trim()
+          message: followUp.trim(),
+          useScripts: true
         })
       })
 
       const data = await response.json()
       if (data.success) {
         setSession(data.session)
-        setFollowUp("")
       } else {
         throw new Error(data.error)
       }
@@ -134,6 +199,7 @@ export default function A2APage() {
       alert("Failed to send message. Check console for details.")
     } finally {
       setIsLoading(false)
+      setFollowUp("")
     }
   }
 
@@ -142,6 +208,8 @@ export default function A2APage() {
     setTopic("")
     setContext("")
     setFollowUp("")
+    setScriptResults(null)
+    setExtractedPair(null)
   }
 
   const renderAgentMessage = (msg: DebateMessage) => {
@@ -171,6 +239,11 @@ export default function A2APage() {
         <div className="whitespace-pre-wrap text-sm leading-relaxed text-gray-300">
           {msg.content}
         </div>
+        
+        {/* Script Results */}
+        {msg.scriptData && (
+          <ScriptResultsPanel data={msg.scriptData} agent={msg.agent} />
+        )}
       </div>
     )
   }
@@ -194,10 +267,14 @@ export default function A2APage() {
           </div>
           <div>
             <h1 className="text-xl font-semibold text-white">A2A Debate</h1>
-            <p className="text-xs text-gray-500">Multi-Agent Trading Analysis</p>
+            <p className="text-xs text-gray-500">Multi-Agent Trading Analysis with Neural Core</p>
           </div>
         </div>
         <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 rounded-full bg-gray-800/50 px-4 py-2 text-xs">
+            <Terminal className="h-3 w-3 text-green-400" />
+            <span className="text-gray-400">Python Scripts</span>
+          </div>
           <div className="flex items-center gap-2 rounded-full bg-gray-800/50 px-4 py-2 text-xs">
             <Brain className="h-3 w-3 text-purple-400" />
             <span className="text-gray-400">3 Agents</span>
@@ -219,6 +296,7 @@ export default function A2APage() {
         <div className="grid grid-cols-3 gap-4 border-b border-gray-800 bg-gray-900/20 px-6 py-4">
           {Object.entries(AGENT_CONFIG).map(([key, config]) => {
             const Icon = config.icon
+            const ScriptIcon = config.scriptIcon
             return (
               <div key={key} className={`rounded-xl border ${config.borderColor} ${config.bgColor} p-4`}>
                 <div className="mb-2 flex items-center gap-2">
@@ -227,6 +305,10 @@ export default function A2APage() {
                 </div>
                 <div className="text-xs text-gray-500">{config.model}</div>
                 <div className="mt-2 text-xs text-gray-400">{config.description}</div>
+                <div className="mt-2 flex items-center gap-1 text-xs text-green-400">
+                  <ScriptIcon className="h-3 w-3" />
+                  <span>{config.scriptName}</span>
+                </div>
               </div>
             )
           })}
@@ -242,7 +324,7 @@ export default function A2APage() {
                 Start a Trading Analysis Debate
               </h2>
               <p className="text-gray-500">
-                Three AI agents will analyze your trading scenario from different perspectives
+                Three AI agents will analyze your trading scenario with Neural Core script integration
               </p>
             </div>
 
@@ -257,6 +339,11 @@ export default function A2APage() {
                   placeholder="e.g., 'BTC is showing bullish divergence on the 4H chart with increasing volume. Should I enter a long position at $43,200?'"
                   className="h-32 w-full rounded-xl border border-gray-700 bg-gray-800/50 p-4 text-sm text-white placeholder-gray-600 outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
                 />
+                {extractedPair && (
+                  <div className="mt-2 text-xs text-green-400">
+                    Detected pair: {extractedPair}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -279,7 +366,7 @@ export default function A2APage() {
                 {isLoading ? (
                   <>
                     <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    Agents are analyzing...
+                    Running scripts & analyzing...
                   </>
                 ) : (
                   <>
@@ -288,6 +375,28 @@ export default function A2APage() {
                   </>
                 )}
               </button>
+            </div>
+
+            {/* Script Integration Info */}
+            <div className="rounded-xl border border-gray-800 bg-gray-900/30 p-4">
+              <div className="mb-3 flex items-center gap-2 text-sm text-gray-400">
+                <Code2 className="h-4 w-4" />
+                Neural Core Script Integration
+              </div>
+              <div className="space-y-2 text-xs text-gray-500">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="h-3 w-3 text-purple-400" />
+                  <span><strong>Proposer:</strong> Runs analyze_market.py for technical data</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Shield className="h-3 w-3 text-amber-400" />
+                  <span><strong>Critic:</strong> Runs confidence_scoring.py for bias detection</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Calculator className="h-3 w-3 text-cyan-400" />
+                  <span><strong>Consensus:</strong> Runs decision_nets.py for Kelly criterion sizing</span>
+                </div>
+              </div>
             </div>
 
             {/* Example Prompts */}
@@ -316,11 +425,20 @@ export default function A2APage() {
         ) : (
           <div className="mx-auto max-w-4xl">
             <div className="mb-6 rounded-xl border border-gray-800 bg-gray-900/30 p-4">
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <MessageSquare className="h-4 w-4" />
-                Topic:
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <MessageSquare className="h-4 w-4" />
+                    Topic:
+                  </div>
+                  <div className="mt-1 text-white">{session.topic}</div>
+                </div>
+                {extractedPair && (
+                  <div className="rounded-lg bg-green-500/10 px-3 py-1 text-xs text-green-400">
+                    {extractedPair}
+                  </div>
+                )}
               </div>
-              <div className="mt-1 text-white">{session.topic}</div>
             </div>
 
             <div className="space-y-2">

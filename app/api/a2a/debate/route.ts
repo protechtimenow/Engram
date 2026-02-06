@@ -1,4 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { exec } from "child_process";
+import { promisify } from "util";
+import * as path from "path";
+
+const execAsync = promisify(exec);
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "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";
 
@@ -8,11 +13,15 @@ const MODELS = {
   consensus: "z-ai/glm-4.7-flash"
 };
 
+// Path to Python scripts
+const SCRIPTS_DIR = path.join(process.cwd(), "src", "engram", "scripts");
+
 interface DebateMessage {
   role: "user" | "assistant";
   content: string;
   agent?: "proposer" | "critic" | "consensus";
   timestamp: string;
+  scriptData?: any; // Store script output
 }
 
 interface DebateSession {
@@ -21,10 +30,91 @@ interface DebateSession {
   messages: DebateMessage[];
   status: "active" | "completed";
   createdAt: string;
+  extractedPair?: string;
+  scriptResults?: {
+    marketAnalysis?: any;
+    confidenceScore?: any;
+    kellyCalculation?: any;
+  };
 }
 
 // In-memory storage for debate sessions
 const debateSessions: Map<string, DebateSession> = new Map();
+
+// Utility: Execute Python script
+async function runPythonScript(scriptName: string, args: string[]): Promise<any> {
+  try {
+    const scriptPath = path.join(SCRIPTS_DIR, scriptName);
+    const command = `python "${scriptPath}" ${args.join(" ")}`;
+    
+    console.log(`Executing: ${command}`);
+    const { stdout, stderr } = await execAsync(command, { timeout: 30000 });
+    
+    if (stderr && !stderr.includes("UserWarning")) {
+      console.warn(`Script stderr: ${stderr}`);
+    }
+    
+    // Try to parse as JSON
+    try {
+      return JSON.parse(stdout);
+    } catch {
+      // Return as text if not JSON
+      return { text: stdout.trim() };
+    }
+  } catch (error) {
+    console.error(`Script execution error: ${error}`);
+    return { error: String(error) };
+  }
+}
+
+// Utility: Extract trading pair from text
+function extractTradingPair(text: string): string | null {
+  // Common patterns: BTC/USD, ETH-USD, BTCUSD, etc.
+  const patterns = [
+    /\b([A-Z]{2,5})\s*\/\s*([A-Z]{2,5})\b/,  // BTC/USD
+    /\b([A-Z]{2,5})\s*-\s*([A-Z]{2,5})\b/,  // BTC-USD
+    /\b([A-Z]{2,5})(USD|EUR|GBP|JPY|USDT)\b/, // BTCUSD
+  ];
+  
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) {
+      if (match[2] && !match[2].match(/^(USD|EUR|GBP|JPY|USDT|BTC|ETH)$/)) {
+        continue; // Second part isn't a valid currency
+      }
+      return match[2] ? `${match[1]}/${match[2]}` : match[0];
+    }
+  }
+  
+  return null;
+}
+
+// Utility: Extract price levels from text
+function extractPriceLevels(text: string): { entry?: number; target?: number; stop?: number } {
+  const levels: { entry?: number; target?: number; stop?: number } = {};
+  
+  // Look for price patterns
+  const pricePattern = /\$?([\d,]+\.?\d*)/g;
+  const prices: number[] = [];
+  let match;
+  
+  while ((match = pricePattern.exec(text)) !== null) {
+    const price = parseFloat(match[1].replace(/,/g, ""));
+    if (price > 100) prices.push(price); // Filter out small numbers
+  }
+  
+  // Sort and assign (lowest = stop, middle = entry, highest = target for longs)
+  if (prices.length >= 1) levels.entry = prices[0];
+  if (prices.length >= 2) levels.target = Math.max(...prices);
+  if (prices.length >= 3) {
+    const sorted = [...prices].sort((a, b) => a - b);
+    levels.stop = sorted[0];
+    levels.entry = sorted[1];
+    levels.target = sorted[sorted.length - 1];
+  }
+  
+  return levels;
+}
 
 async function callModel(model: string, messages: { role: string; content: string }[], systemPrompt?: string) {
   const apiMessages = systemPrompt 
@@ -42,7 +132,7 @@ async function callModel(model: string, messages: { role: string; content: strin
     body: JSON.stringify({
       model: model,
       messages: apiMessages,
-      max_tokens: 1500,
+      max_tokens: 2000,
       temperature: 0.7,
       ...(model.includes("claude") && { reasoning: { enabled: true } })
     }),
@@ -58,28 +148,33 @@ async function callModel(model: string, messages: { role: string; content: strin
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { action, debateId, topic, message, context } = body;
+    const { action, debateId, topic, message, context, useScripts } = body;
 
     // Start a new debate
     if (action === "start") {
       const id = Date.now().toString(36) + Math.random().toString(36).substr(2);
+      const extractedPair = extractTradingPair(topic);
+      
       const session: DebateSession = {
         id,
         topic: topic || "Trading Analysis",
         messages: [],
         status: "active",
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        extractedPair,
+        scriptResults: {}
       };
       debateSessions.set(id, session);
 
-      // Run the debate rounds
-      const results = await runDebate(id, topic, context);
+      // Run the debate rounds (with or without scripts)
+      const results = await runDebate(id, topic, context, useScripts !== false);
       
       return NextResponse.json({ 
         success: true, 
         debateId: id,
         session: debateSessions.get(id),
-        results
+        results,
+        extractedPair
       });
     }
 
@@ -98,7 +193,7 @@ export async function POST(request: NextRequest) {
       });
 
       // Get responses from all agents
-      const results = await continueDebate(debateId, message);
+      const results = await continueDebate(debateId, message, useScripts !== false);
       
       return NextResponse.json({
         success: true,
@@ -116,6 +211,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ session });
     }
 
+    // Run individual script
+    if (action === "script") {
+      const { script, args } = body;
+      const result = await runPythonScript(script, args || []);
+      return NextResponse.json({ success: true, result });
+    }
+
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
 
   } catch (error) {
@@ -127,14 +229,49 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function runDebate(debateId: string, topic: string, context?: string) {
+async function runDebate(debateId: string, topic: string, context?: string, useScripts: boolean = true) {
   const session = debateSessions.get(debateId)!;
-  const messages: { role: string; content: string }[] = [
-    { role: "user", content: `Analyze this trading scenario: ${topic}${context ? `\n\nContext: ${context}` : ""}` }
-  ];
+  const messages: { role: string; content: string }[] = [];
+  
+  let marketAnalysis: any = null;
+  let confidenceScore: any = null;
+  let kellyCalculation: any = null;
+  
+  // Run Python scripts if enabled and we have a trading pair
+  if (useScripts && session.extractedPair) {
+    console.log(`Running scripts for pair: ${session.extractedPair}`);
+    
+    // Market Analysis
+    try {
+      marketAnalysis = await runPythonScript("analyze_market.py", [
+        "--pair", session.extractedPair,
+        "--output", "json"
+      ]);
+      session.scriptResults!.marketAnalysis = marketAnalysis;
+      console.log("Market analysis complete");
+    } catch (e) {
+      console.error("Market analysis failed:", e);
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, 500)); // Rate limit buffer
+  }
+  
+  // Build initial prompt with script data
+  let initialPrompt = `Analyze this trading scenario: ${topic}`;
+  if (context) {
+    initialPrompt += `\n\nContext: ${context}`;
+  }
+  if (marketAnalysis && !marketAnalysis.error) {
+    initialPrompt += `\n\n[TECHNICAL DATA]\n${JSON.stringify(marketAnalysis, null, 2)}`;
+  }
+  
+  messages.push({ role: "user", content: initialPrompt });
 
-  // Proposer Agent
-  const proposerPrompt = `You are the PROPOSER agent in a trading analysis debate. Your role is to:
+  // Proposer Agent - uses market analysis
+  const proposerPrompt = `You are the PROPOSER agent in a trading analysis debate. 
+${marketAnalysis && !marketAnalysis.error ? 'You have been provided with technical analysis data above. Use this data to inform your recommendation, but add your own insights and reasoning.' : 'Analyze the trading scenario thoroughly.'}
+
+Your role is to:
 1. Analyze the trading scenario thoroughly
 2. Propose a clear trading strategy (entry, exit, stop-loss, position sizing)
 3. Provide technical and fundamental rationale
@@ -154,11 +291,36 @@ Format your response with:
     role: "assistant",
     content: proposerResponse,
     agent: "proposer",
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    scriptData: marketAnalysis
   });
 
-  // Critic Agent
-  const criticPrompt = `You are the CRITIC agent in a trading analysis debate. Your role is to:
+  // Extract claim from proposer for confidence scoring
+  const proposerClaim = proposerResponse.split('\n')[0] || "The proposed trade is valid";
+  
+  // Run confidence scoring for critic
+  if (useScripts) {
+    try {
+      confidenceScore = await runPythonScript("confidence_scoring.py", [
+        "--claim", proposerClaim,
+        "--domain", "trading",
+        "--bias-check",
+        "--output", "json"
+      ]);
+      session.scriptResults!.confidenceScore = confidenceScore;
+      console.log("Confidence scoring complete");
+    } catch (e) {
+      console.error("Confidence scoring failed:", e);
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+
+  // Critic Agent - uses confidence scoring
+  const criticPrompt = `You are the CRITIC agent in a trading analysis debate.
+${confidenceScore && !confidenceScore.error ? `You have been provided with confidence scoring data for the proposer's claim. Use this to identify specific weaknesses.` : 'Review the proposer\'s analysis critically.'}
+
+Your role is to:
 1. Review the proposer's analysis critically
 2. Identify flaws, blind spots, or overlooked risks
 3. Challenge assumptions with data-driven counterarguments
@@ -174,18 +336,49 @@ Format your response with:
 
   const criticMessages = [
     ...messages,
-    { role: "assistant", content: proposerResponse }
+    { role: "assistant", content: proposerResponse },
+    ...(confidenceScore && !confidenceScore.error ? [{ 
+      role: "system", 
+      content: `[CONFIDENCE ANALYSIS]\n${JSON.stringify(confidenceScore, null, 2)}` 
+    }] : [])
   ];
+  
   const criticResponse = await callModel(MODELS.critic, criticMessages, criticPrompt);
   session.messages.push({
     role: "assistant",
     content: criticResponse,
     agent: "critic",
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    scriptData: confidenceScore
   });
 
-  // Consensus Agent
-  const consensusPrompt = `You are the CONSENSUS agent in a trading analysis debate. Your role is to:
+  // Extract levels for Kelly calculation
+  const priceLevels = extractPriceLevels(proposerResponse);
+  
+  // Run Kelly calculation for consensus
+  if (useScripts && priceLevels.entry && priceLevels.target) {
+    try {
+      const edge = 0.6; // Estimated from analysis
+      const odds = priceLevels.target / priceLevels.entry;
+      
+      kellyCalculation = await runPythonScript("decision_nets.py", [
+        "--kelly",
+        "--edge", edge.toString(),
+        "--odds", odds.toFixed(2),
+        "--output", "json"
+      ]);
+      session.scriptResults!.kellyCalculation = kellyCalculation;
+      console.log("Kelly calculation complete");
+    } catch (e) {
+      console.error("Kelly calculation failed:", e);
+    }
+  }
+
+  // Consensus Agent - uses Kelly calculation
+  const consensusPrompt = `You are the CONSENSUS agent in a trading analysis debate.
+${kellyCalculation && !kellyCalculation.error ? `You have been provided with Kelly criterion calculations for position sizing. Use this in your final recommendation.` : 'Synthesize the debate into a final recommendation.'}
+
+Your role is to:
 1. Synthesize the proposer's strategy and critic's feedback
 2. Make a final recommendation that balances opportunity and risk
 3. Provide clear, actionable guidance
@@ -204,44 +397,79 @@ Format your response with:
   const consensusMessages = [
     ...messages,
     { role: "assistant", content: proposerResponse },
-    { role: "assistant", content: criticResponse }
+    { role: "assistant", content: criticResponse },
+    ...(kellyCalculation && !kellyCalculation.error ? [{ 
+      role: "system", 
+      content: `[POSITION SIZING DATA]\n${JSON.stringify(kellyCalculation, null, 2)}` 
+    }] : [])
   ];
+  
   const consensusResponse = await callModel(MODELS.consensus, consensusMessages, consensusPrompt);
   session.messages.push({
     role: "assistant",
     content: consensusResponse,
     agent: "consensus",
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    scriptData: kellyCalculation
   });
 
   return {
     proposer: proposerResponse,
     critic: criticResponse,
-    consensus: consensusResponse
+    consensus: consensusResponse,
+    scriptResults: {
+      marketAnalysis,
+      confidenceScore,
+      kellyCalculation
+    }
   };
 }
 
-async function continueDebate(debateId: string, message: string) {
+async function continueDebate(debateId: string, message: string, useScripts: boolean = true) {
   const session = debateSessions.get(debateId)!;
   const debateHistory = session.messages
     .filter(m => m.agent)
-    .map(m => ({ role: "assistant", content: `[${m.agent?.toUpperCase()}]: ${m.content}` }));
+    .map(m => ({ 
+      role: "assistant" as const, 
+      content: `[${m.agent?.toUpperCase()}]: ${m.content}` 
+    }));
 
   const messages = [
     ...debateHistory,
     { role: "user", content: message }
   ];
 
+  // Check if follow-up is about confidence/risk
+  let confidenceScore: any = null;
+  if (useScripts && message.toLowerCase().match(/confidence|risk|bias|uncertainty/)) {
+    try {
+      confidenceScore = await runPythonScript("confidence_scoring.py", [
+        "--claim", message,
+        "--domain", "trading",
+        "--bias-check",
+        "--output", "json"
+      ]);
+    } catch (e) {
+      console.error("Follow-up confidence scoring failed:", e);
+    }
+  }
+
   // All agents respond to the follow-up
   const [proposer, critic, consensus] = await Promise.all([
     callModel(MODELS.proposer, messages, "You are the PROPOSER. Respond to the user's follow-up question based on the debate history."),
-    callModel(MODELS.critic, messages, "You are the CRITIC. Respond to the user's follow-up question based on the debate history."),
+    callModel(MODELS.critic, [
+      ...messages,
+      ...(confidenceScore && !confidenceScore.error ? [{ 
+        role: "system" as const, 
+        content: `[CONFIDENCE DATA]\n${JSON.stringify(confidenceScore, null, 2)}` 
+      }] : [])
+    ], "You are the CRITIC. Respond to the user's follow-up question based on the debate history."),
     callModel(MODELS.consensus, messages, "You are the CONSENSUS. Respond to the user's follow-up question based on the debate history.")
   ]);
 
   session.messages.push(
     { role: "assistant", content: proposer, agent: "proposer", timestamp: new Date().toISOString() },
-    { role: "assistant", content: critic, agent: "critic", timestamp: new Date().toISOString() },
+    { role: "assistant", content: critic, agent: "critic", timestamp: new Date().toISOString(), scriptData: confidenceScore },
     { role: "assistant", content: consensus, agent: "consensus", timestamp: new Date().toISOString() }
   );
 
