@@ -230,7 +230,6 @@ export async function POST(request: NextRequest) {
         timestamp: new Date().toISOString()
       });
       saveSessions(debateSessions);
-      });
 
       const results = await continueDebate(debateId, message, useScripts !== false);
       
