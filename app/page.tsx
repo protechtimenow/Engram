@@ -1,10 +1,10 @@
 "use client"
 
 import { useState, useCallback } from "react"
-import { Sidebar } from "@/components/sidebar"
-import { ChatMessages, type Message } from "@/components/chat-messages"
-import { ChatInput } from "@/components/chat-input"
-import { TerminalPanel, type TerminalLine } from "@/components/terminal-panel"
+import { Sidebar } from "../components/sidebar"
+import { ChatMessages, type Message } from "../components/chat-messages"
+import { ChatInput } from "../components/chat-input"
+import { TerminalPanel, type TerminalLine } from "../components/terminal-panel"
 
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([])
