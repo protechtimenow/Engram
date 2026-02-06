@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { exec } from "child_process";
-import { promisify } from "util";
 import * as path from "path";
 import * as fs from "fs";
+import { analyzeMarket } from "../lib/marketAnalyzer";
+import { scoreConfidence } from "../lib/confidenceScorer";
+import { calculateKelly } from "../lib/kellyCalculator";
 
-const execAsync = promisify(exec);
-
-// File-based session storage for persistence across server restarts
+// File-based session storage
 const SESSIONS_FILE = path.join(process.cwd(), "a2a_sessions.json");
 
-// Load sessions from file if it exists
 function loadSessions(): Map<string, DebateSession> {
   try {
     if (fs.existsSync(SESSIONS_FILE)) {
@@ -18,7 +16,6 @@ function loadSessions(): Map<string, DebateSession> {
       for (const [key, value] of Object.entries(data)) {
         sessions.set(key, value as DebateSession);
       }
-      console.log(`Loaded ${sessions.size} sessions from file`);
       return sessions;
     }
   } catch (e) {
@@ -27,7 +24,6 @@ function loadSessions(): Map<string, DebateSession> {
   return new Map<string, DebateSession>();
 }
 
-// Save sessions to file
 function saveSessions(sessions: Map<string, DebateSession>) {
   try {
     const data: Record<string, DebateSession> = {};
@@ -40,16 +36,13 @@ function saveSessions(sessions: Map<string, DebateSession>) {
   }
 }
 
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "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";
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
 
 const MODELS = {
   proposer: "anthropic/claude-opus-4.6",
   critic: "anthropic/claude-3-5-sonnet",
   consensus: "z-ai/glm-4.7-flash"
 };
-
-// Path to Python scripts
-const SCRIPTS_DIR = path.join(process.cwd(), "src", "engram", "scripts");
 
 interface DebateMessage {
   role: "user" | "assistant";
@@ -73,46 +66,8 @@ interface DebateSession {
   };
 }
 
-// Initialize sessions from file
 const debateSessions: Map<string, DebateSession> = loadSessions();
 
-// Utility: Quote argument for shell (Windows-compatible)
-function quoteArg(arg: string): string {
-  // If arg contains spaces, wrap in double quotes
-  if (arg.includes(' ')) {
-    return `"${arg.replace(/"/g, '""')}"`;
-  }
-  return arg;
-}
-
-// Utility: Execute Python script
-async function runPythonScript(scriptName: string, args: string[]): Promise<any> {
-  try {
-    const scriptPath = path.join(SCRIPTS_DIR, scriptName);
-    const quotedArgs = args.map(quoteArg).join(" ");
-    const command = `python "${scriptPath}" ${quotedArgs}`;
-    
-    console.log(`Executing: ${command}`);
-    const { stdout, stderr } = await execAsync(command, { timeout: 30000 });
-    
-    if (stderr && !stderr.includes("UserWarning")) {
-      console.warn(`Script stderr: ${stderr}`);
-    }
-    
-    // Try to parse as JSON
-    try {
-      return JSON.parse(stdout);
-    } catch {
-      // Return as text if not JSON
-      return { text: stdout.trim() };
-    }
-  } catch (error) {
-    console.error(`Script execution error: ${error}`);
-    return { error: String(error) };
-  }
-}
-
-// Utility: Extract trading pair from text
 function extractTradingPair(text: string): string | null {
   const patterns = [
     /\b([A-Z]{2,5})\s*\/\s*([A-Z]{2,5})\b/,
@@ -129,11 +84,9 @@ function extractTradingPair(text: string): string | null {
       return match[2] ? `${match[1]}/${match[2]}` : match[0];
     }
   }
-  
   return null;
 }
 
-// Utility: Extract price levels from text
 function extractPriceLevels(text: string): { entry?: number; target?: number; stop?: number } {
   const levels: { entry?: number; target?: number; stop?: number } = {};
   const pricePattern = /\$?([\d,]+\.?\d*)/g;
@@ -167,7 +120,7 @@ async function callModel(model: string, messages: { role: string; content: strin
     headers: {
       "Content-Type": "application/json",
       "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-      "HTTP-Referer": "http://localhost:3000",
+      "HTTP-Referer": "https://engram.vercel.app",
       "X-Title": "Engram A2A"
     },
     body: JSON.stringify({
@@ -248,12 +201,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ session });
     }
 
-    if (action === "script") {
-      const { script, args } = body;
-      const result = await runPythonScript(script, args || []);
-      return NextResponse.json({ success: true, result });
-    }
-
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
 
   } catch (error) {
@@ -272,63 +219,62 @@ async function runDebate(debateId: string, topic: string, context?: string, useS
   let marketAnalysis: any = null;
   let confidenceScore: any = null;
   let kellyCalculation: any = null;
+  let currentPrice: number | null = null;
   
+  // Use TypeScript market analysis instead of Python
   if (useScripts && session.extractedPair) {
-    console.log(`Running scripts for pair: ${session.extractedPair}`);
+    console.log(`Running analysis for pair: ${session.extractedPair}`);
     
     try {
-      marketAnalysis = await runPythonScript("analyze_market.py", [
-        "--pair", session.extractedPair,
-        "--output", "json",
-        "--live-data"
-      ]);
+      // Extract price from pair or use default
+      const symbol = session.extractedPair.replace('/', '');
+      currentPrice = symbol.includes('BTC') ? 65000 : 
+                     symbol.includes('ETH') ? 3500 : 
+                     symbol.includes('SOL') ? 150 : 1000;
+      
+      marketAnalysis = analyzeMarket(
+        session.extractedPair,
+        currentPrice,
+        "1h",
+        context
+      );
+      
       session.scriptResults!.marketAnalysis = marketAnalysis;
-      console.log("Market analysis complete");
+      currentPrice = marketAnalysis.current_price;
+      console.log("Market analysis complete:", currentPrice);
     } catch (e) {
       console.error("Market analysis failed:", e);
     }
-    
-    await new Promise(resolve => setTimeout(resolve, 500));
   }
   
-  // Build prompt with CURRENT price prominently featured
-  const currentPrice = marketAnalysis?.current_price;
+  // Build prompt with current price
   let initialPrompt = `Analyze this trading scenario: ${topic}`;
   
   if (currentPrice) {
-    initialPrompt += `\n\n**CRITICAL: Current market price is $${currentPrice.toLocaleString()}.**
-**All analysis MUST be based on this CURRENT price, not historical assumptions.**`;
+    initialPrompt += `\n\n**CRITICAL: Current market price is $${currentPrice.toLocaleString()}.**`;
+    initialPrompt += `\n**All analysis MUST be based on this CURRENT price.**`;
   }
   
   if (context) {
     initialPrompt += `\n\nContext: ${context}`;
   }
-  if (marketAnalysis && !marketAnalysis.error) {
+  if (marketAnalysis) {
     initialPrompt += `\n\n[TECHNICAL DATA]\n${JSON.stringify(marketAnalysis, null, 2)}`;
   }
   
   messages.push({ role: "user", content: initialPrompt });
 
-  const proposerPrompt = `You are the PROPOSER agent in a trading analysis debate. 
-${marketAnalysis && !marketAnalysis.error ? `**CRITICAL INSTRUCTION**: The current price is $${currentPrice?.toLocaleString() || 'unknown'}. 
-
-You MUST base your entry, stop, and target levels on the CURRENT price, not historical prices or assumptions. If current price is $${currentPrice?.toLocaleString()}, your entry should be NEAR this level (within 5-10%), not 30-50% away.
-
-Use the technical data provided to inform your analysis.` : 'Analyze the trading scenario thoroughly.'}
-
-Your role is to:
-1. Analyze the trading scenario using CURRENT market price
-2. Propose entry level NEAR current price (not far away)
-3. Provide realistic targets based on current market structure
-4. Acknowledge if current price makes the trade unattractive
+  // Proposer Agent
+  const proposerPrompt = `You are the PROPOSER agent in a trading analysis debate.
+${currentPrice ? `**CRITICAL**: Current price is $${currentPrice.toLocaleString()}. Entry must be NEAR this level (within 5-10%).` : ''}
 
 Format your response with:
 - SIGNAL: (LONG/SHORT/NEUTRAL)
-- ENTRY: (price level - MUST be near current price of $${currentPrice?.toLocaleString() || 'N/A'})
+- ENTRY: (price level - NEAR current price)
 - TARGET: (price target)
 - STOP: (stop loss)
 - POSITION: (% of portfolio)
-- RATIONALE: (your analysis referencing CURRENT price)
+- RATIONALE: (your analysis)
 - RISKS: (key concerns)`;
 
   const proposerResponse = await callModel(MODELS.proposer, messages, proposerPrompt);
@@ -340,50 +286,25 @@ Format your response with:
     scriptData: marketAnalysis
   });
 
-  // Extract a shorter claim for confidence scoring (first line or first 100 chars)
-  const proposerClaim = proposerResponse.split('\n')[0].slice(0, 100) || "Trade proposal analysis";
+  // Confidence Scoring (TypeScript)
+  const proposerClaim = proposerResponse.split('\n')[0].slice(0, 100) || "Trade proposal";
   
   if (useScripts) {
     try {
-      confidenceScore = await runPythonScript("confidence_scoring.py", [
-        "--claim", proposerClaim,
-        "--domain", "trading",
-        "--bias-check",
-        "--output", "json"
-      ]);
+      confidenceScore = scoreConfidence(proposerClaim, undefined, "trading");
       session.scriptResults!.confidenceScore = confidenceScore;
       console.log("Confidence scoring complete");
     } catch (e) {
       console.error("Confidence scoring failed:", e);
     }
-    
-    await new Promise(resolve => setTimeout(resolve, 500));
   }
 
-  const criticPrompt = `You are the CRITIC agent in a trading analysis debate.
-${confidenceScore && !confidenceScore.error ? `You have been provided with confidence scoring data for the proposer's claim. Use this to identify specific weaknesses.` : 'Review the proposer\'s analysis critically.'}
-
-Your role is to:
-1. Review the proposer's analysis critically
-2. Identify flaws, blind spots, or overlooked risks
-3. Challenge assumptions with data-driven counterarguments
-4. Suggest improvements or alternative scenarios
-5. Be constructive but rigorous - don't just agree
-
-Format your response with:
-- ASSESSMENT: (VALID/CONCERNS/REJECT)
-- CONCERNS: (specific issues with the proposal)
-- ALTERNATIVES: (different approaches to consider)
-- RISK FACTORS: (what could go wrong)
-- RECOMMENDATIONS: (how to improve the trade)`;
+  // Critic Agent
+  const criticPrompt = `You are the CRITIC agent. Review the analysis critically.`;
 
   const criticMessages = [
     ...messages,
-    { role: "assistant", content: proposerResponse },
-    ...(confidenceScore && !confidenceScore.error ? [{ 
-      role: "system", 
-      content: `[CONFIDENCE ANALYSIS]\n${JSON.stringify(confidenceScore, null, 2)}` 
-    }] : [])
+    { role: "assistant", content: proposerResponse }
   ];
   
   const criticResponse = await callModel(MODELS.critic, criticMessages, criticPrompt);
@@ -395,6 +316,7 @@ Format your response with:
     scriptData: confidenceScore
   });
 
+  // Kelly Calculation (TypeScript)
   const priceLevels = extractPriceLevels(proposerResponse);
   
   if (useScripts && priceLevels.entry && priceLevels.target) {
@@ -402,12 +324,7 @@ Format your response with:
       const edge = 0.6;
       const odds = priceLevels.target / priceLevels.entry;
       
-      kellyCalculation = await runPythonScript("decision_nets.py", [
-        "--kelly",
-        "--edge", edge.toString(),
-        "--odds", odds.toFixed(2),
-        "--output", "json"
-      ]);
+      kellyCalculation = calculateKelly(edge, odds);
       session.scriptResults!.kellyCalculation = kellyCalculation;
       console.log("Kelly calculation complete");
     } catch (e) {
@@ -415,39 +332,24 @@ Format your response with:
     }
   }
 
-  const consensusPrompt = `You are the CONSENSUS agent in a trading analysis debate.
-**CRITICAL: Current price is $${currentPrice?.toLocaleString() || 'unknown'}.**
-
-${kellyCalculation && !kellyCalculation.error ? `You have been provided with Kelly criterion calculations for position sizing. Use this in your final recommendation.` : 'Synthesize the debate into a final recommendation.'}
-
-Your role is to:
-1. VALIDATE that proposed entry is NEAR current price ($${currentPrice?.toLocaleString()})
-2. If entry is >10% from current price, recommend WAIT or ADJUST levels
-3. Synthesize proposer and critic feedback with CURRENT market reality
-4. Provide clear, actionable guidance
-
-**VALIDATION CHECK:**
-- If current price is $${currentPrice?.toLocaleString()} and entry is $2,500+, you MUST say "WAIT" or "REVISE ENTRY"
-- Entry should be within 5-10% of current market price
+  // Consensus Agent
+  const consensusPrompt = `You are the CONSENSUS agent.
+${currentPrice ? `**Current price: $${currentPrice.toLocaleString()}**` : ''}
+${kellyCalculation ? `**Kelly recommends: ${kellyCalculation.half_kelly}% position (Half Kelly)**` : ''}
 
 Format your response with:
 - FINAL SIGNAL: (LONG/SHORT/NEUTRAL/WAIT)
-- ADJUSTED ENTRY: (price level - MUST be realistic from current $${currentPrice?.toLocaleString()})
+- ADJUSTED ENTRY: (realistic level)
 - ADJUSTED TARGET: (price target)
 - ADJUSTED STOP: (stop loss)
-- POSITION SIZE: (% of portfolio with rationale)
-- EXECUTION: (immediate/conditional on what)
-- CONFIDENCE: (HIGH/MEDIUM/LOW with explanation)
-- SUMMARY: (concise rationale including current price validation)`;
+- POSITION SIZE: (% of portfolio)
+- CONFIDENCE: (HIGH/MEDIUM/LOW)
+- SUMMARY: (concise rationale)`;
 
   const consensusMessages = [
     ...messages,
     { role: "assistant", content: proposerResponse },
-    { role: "assistant", content: criticResponse },
-    ...(kellyCalculation && !kellyCalculation.error ? [{ 
-      role: "system", 
-      content: `[POSITION SIZING DATA]\n${JSON.stringify(kellyCalculation, null, 2)}` 
-    }] : [])
+    { role: "assistant", content: criticResponse }
   ];
   
   const consensusResponse = await callModel(MODELS.consensus, consensusMessages, consensusPrompt);
@@ -487,31 +389,21 @@ async function continueDebate(debateId: string, message: string, useScripts: boo
     { role: "user", content: message }
   ];
 
+  // Confidence scoring for follow-up
   let confidenceScore: any = null;
-  if (useScripts && message.toLowerCase().match(/confidence|risk|bias|uncertainty/)) {
+  if (useScripts && message.toLowerCase().match(/confidence|risk|bias/)) {
     try {
       const claim = message.slice(0, 100);
-      confidenceScore = await runPythonScript("confidence_scoring.py", [
-        "--claim", claim,
-        "--domain", "trading",
-        "--bias-check",
-        "--output", "json"
-      ]);
+      confidenceScore = scoreConfidence(claim, undefined, "trading");
     } catch (e) {
       console.error("Follow-up confidence scoring failed:", e);
     }
   }
 
   const [proposer, critic, consensus] = await Promise.all([
-    callModel(MODELS.proposer, messages, "You are the PROPOSER. Respond to the user's follow-up question based on the debate history."),
-    callModel(MODELS.critic, [
-      ...messages,
-      ...(confidenceScore && !confidenceScore.error ? [{ 
-        role: "system" as const, 
-        content: `[CONFIDENCE DATA]\n${JSON.stringify(confidenceScore, null, 2)}` 
-      }] : [])
-    ], "You are the CRITIC. Respond to the user's follow-up question based on the debate history."),
-    callModel(MODELS.consensus, messages, "You are the CONSENSUS. Respond to the user's follow-up question based on the debate history.")
+    callModel(MODELS.proposer, messages, "Respond to the follow-up question."),
+    callModel(MODELS.critic, messages, "Respond critically."),
+    callModel(MODELS.consensus, messages, "Synthesize the response.")
   ]);
 
   session.messages.push(
