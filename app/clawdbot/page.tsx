@@ -91,7 +91,7 @@ export default function ClawdBotPage() {
             addSystemMessage("Authentication successful")
           } else if (data.type === "res" && data.ok === false) {
             addSystemMessage(
-              `Authentication failed: ${data.error?.message || "Unknown error"}`
+              "Authentication failed: " + (data.error?.message || "Unknown error")
             )
           } else if (data.type === "ping") {
             ws.send(
@@ -111,13 +111,12 @@ export default function ClawdBotPage() {
                 timestamp: new Date().toLocaleTimeString(),
               },
             ])
-            // Acknowledge the request
             ws.send(
               JSON.stringify({ type: "res", id: data.id, ok: true, result: {} })
             )
           }
         } catch {
-          // Ignore malformed messages
+          /* ignore malformed messages */
         }
       }
 
@@ -154,7 +153,6 @@ export default function ClawdBotPage() {
     addSystemMessage("Disconnected from ClawdBot")
   }, [addSystemMessage])
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       intentionalCloseRef.current = true
@@ -193,9 +191,25 @@ export default function ClawdBotPage() {
     }
   }
 
+  const emptyState = messages.length === 0
+  const statusDotClass = isConnected
+    ? "bg-[hsl(142,71%,45%)] shadow-[0_0_10px_hsl(142,71%,45%)]"
+    : isConnecting
+      ? "animate-pulse bg-[hsl(48,96%,53%)]"
+      : "bg-destructive"
+
+  const connectBtnClass = isConnected
+    ? "border border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/20"
+    : "border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
+
+  const connectBtnLabel = isConnecting
+    ? "Connecting..."
+    : isConnected
+      ? "Disconnect"
+      : "Connect"
+
   return (
     <div className="flex h-dvh flex-col bg-background text-foreground">
-      {/* Header */}
       <header className="flex items-center justify-between border-b border-border bg-card/70 px-4 py-3 backdrop-blur-xl md:px-6 md:py-4">
         <div className="flex items-center gap-3">
           <Link
@@ -213,14 +227,7 @@ export default function ClawdBotPage() {
         </div>
         <div className="flex items-center gap-3 md:gap-4">
           <div className="flex items-center gap-2">
-            <span
-              className={cn(
-                "h-2 w-2 rounded-full",
-                isConnected && "bg-[hsl(142,71%,45%)] shadow-[0_0_10px_hsl(142,71%,45%)]",
-                isConnecting && "animate-pulse bg-[hsl(48,96%,53%)]",
-                !isConnected && !isConnecting && "bg-destructive"
-              )}
-            />
+            <span className={cn("h-2 w-2 rounded-full", statusDotClass)} />
             <span className="hidden text-sm text-muted-foreground sm:inline">
               {connectionStatus}
             </span>
@@ -230,87 +237,83 @@ export default function ClawdBotPage() {
             disabled={isConnecting}
             className={cn(
               "flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors md:px-4",
-              isConnected
-                ? "border border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/20"
-                : "border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20",
+              connectBtnClass,
               isConnecting && "cursor-not-allowed opacity-50"
             )}
           >
             <Power className="h-4 w-4" />
-            <span className="hidden sm:inline">
-              {isConnecting ? "Connecting..." : isConnected ? "Disconnect" : "Connect"}
-            </span>
+            <span className="hidden sm:inline">{connectBtnLabel}</span>
           </button>
         </div>
       </header>
 
-      {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 md:p-6">
-        {messages.length === 0 && (
+        {emptyState ? (
           <div className="flex h-full flex-col items-center justify-center gap-4 text-muted-foreground">
             <Bot className="h-16 w-16 opacity-20" />
             <p className="text-lg">Connect to ClawdBot to start chatting</p>
             <p className="text-sm">Click the Connect button above</p>
           </div>
-        )}
+        ) : (
+          <div className="mx-auto max-w-4xl space-y-3">
+            {messages.map((msg, i) => {
+              const isUser = msg.role === "user"
+              const isSystem = msg.role === "system"
+              const isAssistant = msg.role === "assistant"
 
-        <div className="mx-auto max-w-4xl space-y-3">
-          {messages.map((msg, i) => (
-            <div
-              key={i}
-              className={cn(
+              const rowClass = cn(
                 "animate-fade-in flex gap-3 rounded-2xl p-4",
-                msg.role === "user" &&
-                  "ml-8 bg-gradient-to-br from-primary/15 to-accent/10 md:ml-16",
-                msg.role === "assistant" &&
-                  "mr-8 border border-primary/20 bg-card/70 backdrop-blur-sm md:mr-16",
-                msg.role === "system" &&
-                  "mx-8 justify-center bg-muted/20 text-center text-sm text-muted-foreground md:mx-16"
-              )}
-            >
-              {msg.role !== "system" && (
-                <div
-                  className={cn(
-                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-                    msg.role === "user" ? "bg-muted" : "bg-primary/15"
-                  )}
-                >
-                  {msg.role === "user" ? (
-                    <User className="h-4 w-4 text-foreground" />
-                  ) : (
-                    <Bot className="h-4 w-4 text-primary" />
-                  )}
-                </div>
-              )}
-              <div className="flex-1">
-                {msg.role !== "system" && (
-                  <div className="mb-1 flex items-center gap-2">
-                    <span
+                isUser && "ml-8 bg-gradient-to-br from-primary/15 to-accent/10 md:ml-16",
+                isAssistant && "mr-8 border border-primary/20 bg-card/70 backdrop-blur-sm md:mr-16",
+                isSystem && "mx-8 justify-center bg-muted/20 text-center text-sm text-muted-foreground md:mx-16"
+              )
+
+              return (
+                <div key={i} className={rowClass}>
+                  {!isSystem && (
+                    <div
                       className={cn(
-                        "text-sm font-medium",
-                        msg.role === "user" ? "text-foreground" : "text-primary"
+                        "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+                        isUser ? "bg-muted" : "bg-primary/15"
                       )}
                     >
-                      {msg.role === "user" ? "You" : "ClawdBot"}
-                    </span>
-                    {msg.timestamp && (
-                      <span className="text-xs text-muted-foreground">
-                        {msg.timestamp}
-                      </span>
+                      {isUser ? (
+                        <User className="h-4 w-4 text-foreground" />
+                      ) : (
+                        <Bot className="h-4 w-4 text-primary" />
+                      )}
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    {!isSystem && (
+                      <div className="mb-1 flex items-center gap-2">
+                        <span
+                          className={cn(
+                            "text-sm font-medium",
+                            isUser ? "text-foreground" : "text-primary"
+                          )}
+                        >
+                          {isUser ? "You" : "ClawdBot"}
+                        </span>
+                        {msg.timestamp && (
+                          <span className="text-xs text-muted-foreground">
+                            {msg.timestamp}
+                          </span>
+                        )}
+                      </div>
                     )}
+                    <p className="whitespace-pre-wrap leading-relaxed text-foreground">
+                      {msg.content}
+                    </p>
                   </div>
-                )}
-                <p className="whitespace-pre-wrap leading-relaxed text-foreground">
-                  {msg.content}
-                </p>
-              </div>
-            </div>
-          ))}
-          <div ref={messagesEndRef} />
-        </div>
+                </div>
+              )
+            })}
+            <div ref={messagesEndRef} />
+          </div>
+        )}
       </div>
 
-      {/* Input */}
       <div className="border-t border-border bg-card/70 p-3 backdrop-blur-xl md:p-4">
         <div className="mx-auto flex max-w-4xl gap-3">
           <input
@@ -319,9 +322,7 @@ export default function ClawdBotPage() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={
-              isConnected
-                ? "Type a message..."
-                : "Connect first to send messages"
+              isConnected ? "Type a message..." : "Connect first to send messages"
             }
             disabled={!isConnected}
             className="flex-1 rounded-xl border border-border bg-muted/30 px-4 py-3 text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary disabled:opacity-50"
