@@ -1,6 +1,8 @@
 "use client"
 
-import { cn } from "../lib/utils"
+function cn(...classes: (string | boolean | undefined | null)[]) {
+  return classes.filter(Boolean).join(" ")
+}
 
 export interface TerminalLine {
   text: string
