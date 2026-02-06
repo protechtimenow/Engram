@@ -133,6 +133,27 @@ export default function ClawdBotPage() {
               }])
             }
           }
+        } else if (data.type === "event" && data.event === "chat") {
+          // Handle chat messages from bot
+          const message = data.payload?.message
+          if (message && message.role === "assistant") {
+            // Extract text content from the message
+            let content = ""
+            if (Array.isArray(message.content)) {
+              content = message.content.map((c: any) => c.text || "").join("")
+            } else if (typeof message.content === "string") {
+              content = message.content
+            }
+            
+            if (content && data.payload.state === "final") {
+              console.log("Chat message:", content)
+              setMessages(prev => [...prev, {
+                role: "assistant",
+                content: content,
+                timestamp: new Date().toLocaleTimeString()
+              }])
+            }
+          }
         } else if (data.type === "event") {
           // Handle other events
           console.log("Event received:", data.event)
