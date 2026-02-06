@@ -68,6 +68,13 @@ function Sidebar({
             <span className="inline-block h-2 w-2 rounded-full bg-purple-500 shadow-[0_0_10px_#a855f7]" />
             Model Comparison (A2A)
           </a>
+          <a 
+            href="/a2a"
+            className="flex items-center gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2.5 text-sm text-foreground transition-colors hover:border-primary hover:bg-muted/50"
+          >
+            <span className="inline-block h-2 w-2 rounded-full bg-gradient-to-r from-purple-500 via-pink-500 to-cyan-500 shadow-[0_0_10px_#a855f7]" />
+            A2A Debate (3 Agents)
+          </a>
         </div>
       </div>
 
