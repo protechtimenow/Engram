@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as path from "path";
 import * as fs from "fs";
-import { analyzeMarket } from "../../lib/marketAnalyzer";
-import { scoreConfidence } from "../../lib/confidenceScorer";
-import { calculateKelly } from "../../lib/kellyCalculator";
+import { analyzeMarket } from "../lib/marketAnalyzer";
+import { scoreConfidence } from "../lib/confidenceScorer";
+import { calculateKelly } from "../lib/kellyCalculator";
 import {
   routeAllAgents,
   assignTier,
@@ -12,7 +12,7 @@ import {
   estimateDebateCost,
   TierAssignment,
   TIER_CONFIG
-} from "../../lib/tierRouter";
+} from "../lib/tierRouter";
 
 // Feature flag: enable tiered routing
 const ENABLE_TIER_ROUTING = process.env.ENABLE_TIER_ROUTING !== "false";
