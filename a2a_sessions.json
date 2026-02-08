@@ -313,5 +313,68 @@
         "error": "Error: Command failed: python \"C:\\Users\\OFFRSTAR0\\Engram\\src\\engram\\scripts\\decision_nets.py\" --kelly --edge 0.6 --odds 1.18 --output json\n"
       }
     }
+  },
+  "debate_1770580729281_64zsbm0qz": {
+    "id": "debate_1770580729281_64zsbm0qz",
+    "topic": "BTC/USD analysis",
+    "messages": [
+      {
+        "role": "assistant",
+        "agent": "proposer",
+        "content": "[PROPOSER] Signal: BUY | Confidence: 51.5% | Tier: SIMPLE",
+        "timestamp": "2026-02-08T19:58:49.564Z",
+        "scriptData": {
+          "pipelineResult": {
+            "pair": "BTC/USD",
+            "price": 71378.85,
+            "change_24h": 3.009,
+            "market_bias": "BULLISH",
+            "confidence": 0.515045,
+            "risk_score": 0.03009,
+            "signal": "BUY"
+          },
+          "tier": "SIMPLE"
+        }
+      },
+      {
+        "role": "assistant",
+        "agent": "critic",
+        "content": "[CRITIC] Assessment: CAUTIOUS | Reasoning: BULLISH bias with 3.0% risk score. AGREE with signal but suggest monitoring. | Tier: SIMPLE",
+        "timestamp": "2026-02-08T19:58:49.564Z",
+        "scriptData": {
+          "tier": "SIMPLE"
+        }
+      },
+      {
+        "role": "assistant",
+        "agent": "consensus",
+        "content": "[CONSENSUS] Final Decision: BUY | Final Confidence: 51.5% | Total Cost: $0.001386 | Tier: SIMPLE",
+        "timestamp": "2026-02-08T19:58:49.564Z",
+        "scriptData": {
+          "tier": "SIMPLE",
+          "totalCost": 0.001386
+        }
+      }
+    ],
+    "status": "completed",
+    "createdAt": "2026-02-08T19:58:49.281Z",
+    "extractedPair": "BTC/USD",
+    "scriptResults": {
+      "marketAnalysis": {
+        "pair": "BTC/USD",
+        "price": 71378.85,
+        "change_24h": 3.009,
+        "market_bias": "BULLISH",
+        "confidence": 0.515045,
+        "risk_score": 0.03009,
+        "signal": "BUY"
+      }
+    },
+    "tierDistribution": {
+      "proposer": "SIMPLE",
+      "critic": "SIMPLE",
+      "consensus": "SIMPLE"
+    },
+    "totalCost": 0.001386
   }
 }

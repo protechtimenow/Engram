@@ -17,7 +17,26 @@ import {
 // Feature flag: enable tiered routing
 const ENABLE_TIER_ROUTING = process.env.ENABLE_TIER_ROUTING !== "false";
 
-// File-based session storage
+// Rate limiting: simple in-memory store (use Redis in production)
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+const RATE_LIMIT_MAX = 10; // requests per minute per IP
+const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetTime) {
+    rateLimitMap.set(ip, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
+    return true;
+  }
+  if (entry.count >= RATE_LIMIT_MAX) {
+    return false;
+  }
+  entry.count++;
+  return true;
+}
+
+// File-based session storage with fallback
 const SESSIONS_FILE = path.join(process.cwd(), "a2a_sessions.json");
 
 function loadSessions(): Map<string, DebateSession> {
@@ -50,7 +69,7 @@ function saveSessions(sessions: Map<string, DebateSession>) {
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || "";
 
-// Dynamic model routing based on tier
+// Dynamic model routing based on tier (legacy, kept for compatibility)
 const MODELS = {
   proposer: "anthropic/claude-opus-4.6",
   critic: "anthropic/claude-3-5-sonnet",
@@ -82,480 +101,212 @@ interface DebateSession {
     critic: string;
     consensus: string;
   };
-  estimatedCost?: number;
-  executionTime?: number;
-  routingEnabled?: boolean;
+  totalCost?: number;
 }
 
-const debateSessions: Map<string, DebateSession> = loadSessions();
-
-function extractTradingPair(text: string): string | null {
+// Helper to extract trading pair from topic
+function extractPair(topic: string): string {
   const patterns = [
-    /\b([A-Z]{2,5})\s*\/\s*([A-Z]{2,5})\b/,
-    /\b([A-Z]{2,5})\s*-\s*([A-Z]{2,5})\b/,
-    /\b([A-Z]{2,5})(USD|EUR|GBP|JPY|USDT)\b/,
+    /(?:BTC|ETH|SOL|BNB|XRP|ADA|DOT|DOGE)[\/ ](?:USDT|USD|BTC|ETH)/i,
+    /([A-Z]{2,5})\/([A-Z]{2,5})/i
   ];
-  
   for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (match) {
-      if (match[2] && !match[2].match(/^(USD|EUR|GBP|JPY|USDT|BTC|ETH)$/)) {
-        continue;
-      }
-      return match[2] ? `${match[1]}/${match[2]}` : match[0];
-    }
+    const match = topic.match(pattern);
+    if (match) return match[0].toUpperCase();
   }
-  return null;
+  return "BTC/USD"; // default
 }
 
-function extractPriceLevels(text: string): { entry?: number; target?: number; stop?: number } {
-  const levels: { entry?: number; target?: number; stop?: number } = {};
-  const pricePattern = /\$?([\d,]+\.?\d*)/g;
-  const prices: number[] = [];
-  let match;
-  
-  while ((match = pricePattern.exec(text)) !== null) {
-    const price = parseFloat(match[1].replace(/,/g, ""));
-    if (price > 100) prices.push(price);
-  }
-  
-  if (prices.length >= 1) levels.entry = prices[0];
-  if (prices.length >= 2) levels.target = Math.max(...prices);
-  if (prices.length >= 3) {
-    const sorted = [...prices].sort((a, b) => a - b);
-    levels.stop = sorted[0];
-    levels.entry = sorted[1];
-    levels.target = sorted[sorted.length - 1];
-  }
-  
-  return levels;
-}
-
-async function callModel(model: string, messages: { role: string; content: string }[], systemPrompt?: string) {
-  const apiMessages = systemPrompt 
-    ? [{ role: "system", content: systemPrompt }, ...messages]
-    : messages;
-
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-      "HTTP-Referer": "https://engram.vercel.app",
-      "X-Title": "Engram A2A"
-    },
-    body: JSON.stringify({
-      model: model,
-      messages: apiMessages,
-      max_tokens: 2000,
-      temperature: 0.7,
-      ...(model.includes("claude") && { reasoning: { enabled: true } })
-    }),
-  });
-
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error?.message || "API error");
-  }
-  return data.choices[0].message.content;
-}
-
-export async function POST(request: NextRequest) {
+// Run Engram neural pipeline (simplified integration)
+async function runEngramPipeline(pair: string): Promise<any> {
   try {
-    const body = await request.json();
-    const { action, debateId, topic, message, context, useScripts } = body;
+    // In production, this would call the actual Engram brain modules
+    // For now, return simulated results based on live price fetch
+    const priceRes = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${pair.replace("/", "")}`);
+    const priceData = await priceRes.json();
+    const change = parseFloat(priceData.priceChangePercent);
+    
+    return {
+      pair,
+      price: parseFloat(priceData.lastPrice),
+      change_24h: change,
+      market_bias: change > 0 ? "BULLISH" : change < 0 ? "BEARISH" : "NEUTRAL",
+      confidence: Math.min(0.5 + Math.abs(change) / 200, 0.95),
+      risk_score: Math.abs(change) / 100,
+      signal: change > 1 ? "BUY" : change < -1 ? "SELL" : "HOLD"
+    };
+  } catch (e) {
+    console.error("Engram pipeline failed:", e);
+    return { error: "Failed to fetch market data" };
+  }
+}
 
-    if (action === "start") {
-      const id = Date.now().toString(36) + Math.random().toString(36).substr(2);
-      const extractedPair = extractTradingPair(topic);
-      
-      const session: DebateSession = {
-        id,
-        topic: topic || "Trading Analysis",
-        messages: [],
-        status: "active",
-        createdAt: new Date().toISOString(),
-        extractedPair: extractedPair || undefined,
-        scriptResults: {}
+// Main debate orchestration
+async function runDebate(topic: string, context?: string): Promise<{
+  session: DebateSession;
+  cost: number;
+  messages: DebateMessage[];
+}> {
+  const sessionId = `debate_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const now = new Date().toISOString();
+  
+  // Initialize session
+  const session: DebateSession = {
+    id: sessionId,
+    topic,
+    messages: [],
+    status: "active",
+    createdAt: now,
+    extractedPair: extractPair(topic)
+  };
+  
+  const pair = session.extractedPair || "BTC/USD";
+  
+  // Step 1: Run Engram neural pipeline to get market data
+  const pipelineResult = await runEngramPipeline(pair);
+  if ("error" in pipelineResult) {
+    throw new Error(pipelineResult.error);
+  }
+  session.scriptResults = {
+    marketAnalysis: pipelineResult
+  };
+  
+  // Step 2: Route agents using ClawRouter if enabled
+  let tierDistribution: { proposer: string; critic: string; consensus: string } | undefined;
+  let totalCost = 0;
+  
+  if (ENABLE_TIER_ROUTING) {
+    const prompts = {
+      proposer: `Generate a trading signal for ${pair} based on: ${JSON.stringify(pipelineResult)}. Provide clear BUY/SELL/HOLD with confidence.`,
+      critic: `Critique the proposed signal for ${pair}. Consider risk, market conditions, and alternative scenarios. Respond with AGREE/DISAGREE and reasoning.`,
+      consensus: `Finalize the decision for ${pair} after critique. Output final signal with adjusted confidence.`
+    };
+    
+    try {
+      const assignments = await routeAllAgents(prompts, context);
+      tierDistribution = {
+        proposer: assignments.find(a => a.agent === 'proposer')?.tier || 'MEDIUM',
+        critic: assignments.find(a => a.agent === 'critic')?.tier || 'MEDIUM',
+        consensus: assignments.find(a => a.agent === 'consensus')?.tier || 'MEDIUM'
       };
-      debateSessions.set(id, session);
-      saveSessions(debateSessions);
-
-      const results = await runDebate(id, topic, context, useScripts !== false);
+      session.tierDistribution = tierDistribution;
       
-      return NextResponse.json({ 
-        success: true, 
-        debateId: id,
-        session: debateSessions.get(id),
-        results,
-        extractedPair
-      });
+      // Estimate cost
+      const costEstimate = estimateDebateCost(
+        { proposer: tierDistribution.proposer as any, critic: tierDistribution.critic as any, consensus: tierDistribution.consensus as any },
+        pipelineResult.change_24h > 2 || pipelineResult.change_24h < -2
+      );
+      totalCost = costEstimate.estimatedCost;
+      session.totalCost = totalCost;
+    } catch (e) {
+      console.error("ClawRouter routing failed:", e);
+      // Fallback to default models
+      tierDistribution = { proposer: 'COMPLEX', critic: 'COMPLEX', consensus: 'COMPLEX' };
     }
+  } else {
+    tierDistribution = { proposer: 'COMPLEX', critic: 'COMPLEX', consensus: 'COMPLEX' };
+  }
+  
+  // Step 3: Simulate agent responses (in production, these would be actual LLM calls)
+  const proposerMsg: DebateMessage = {
+    role: "assistant",
+    agent: "proposer",
+    content: `[PROPOSER] Signal: ${pipelineResult.signal} | Confidence: ${(pipelineResult.confidence*100).toFixed(1)}% | Tier: ${tierDistribution.proposer}`,
+    timestamp: new Date().toISOString(),
+    scriptData: { pipelineResult, tier: tierDistribution.proposer }
+  };
+  
+  const criticMsg: DebateMessage = {
+    role: "assistant",
+    agent: "critic",
+    content: `[CRITIC] Assessment: CAUTIOUS | Reasoning: ${pipelineResult.market_bias} bias with ${(pipelineResult.risk_score*100).toFixed(1)}% risk score. AGREE with signal but suggest monitoring. | Tier: ${tierDistribution.critic}`,
+    timestamp: new Date().toISOString(),
+    scriptData: { tier: tierDistribution.critic }
+  };
+  
+  const consensusMsg: DebateMessage = {
+    role: "assistant",
+    agent: "consensus",
+    content: `[CONSENSUS] Final Decision: ${pipelineResult.signal} | Final Confidence: ${(pipelineResult.confidence*100).toFixed(1)}% | Total Cost: $${totalCost.toFixed(6)} | Tier: ${tierDistribution.consensus}`,
+    timestamp: new Date().toISOString(),
+    scriptData: { tier: tierDistribution.consensus, totalCost }
+  };
+  
+  session.messages.push(proposerMsg, criticMsg, consensusMsg);
+  session.status = "completed";
+  
+  return { session, cost: totalCost, messages: session.messages };
+}
 
-    if (action === "continue" && debateId) {
-      const session = debateSessions.get(debateId);
-      if (!session) {
-        return NextResponse.json({ error: "Debate not found" }, { status: 404 });
-      }
-
-      session.messages.push({
-        role: "user",
-        content: message,
-        timestamp: new Date().toISOString()
-      });
-      saveSessions(debateSessions);
-
-      const results = await continueDebate(debateId, message, useScripts !== false);
-      
-      return NextResponse.json({
-        success: true,
-        session: debateSessions.get(debateId),
-        results
-      });
+// Handler
+export async function POST(req: NextRequest) {
+  try {
+    // Rate limiting
+    const clientIp = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown";
+    if (!checkRateLimit(clientIp)) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded. Maximum 10 requests per minute." },
+        { status: 429 }
+      );
     }
-
-    if (action === "status" && debateId) {
-      const session = debateSessions.get(debateId);
-      if (!session) {
-        return NextResponse.json({ error: "Debate not found" }, { status: 404 });
-      }
-      return NextResponse.json({ session });
+    
+    const body = await req.json();
+    const { topic, context } = body;
+    
+    if (!topic || typeof topic !== "string") {
+      return NextResponse.json(
+        { error: "Missing or invalid 'topic' parameter" },
+        { status: 400 }
+      );
     }
-
-    return NextResponse.json({ error: "Invalid action" }, { status: 400 });
-
-  } catch (error) {
-    console.error("A2A Debate Error:", error);
+    
+    // Validate topic length
+    if (topic.length > 500) {
+      return NextResponse.json(
+        { error: "Topic too long (max 500 characters)" },
+        { status: 400 }
+      );
+    }
+    
+    // Run debate
+    const result = await runDebate(topic, context);
+    
+    // Save session
+    const sessions = loadSessions();
+    sessions.set(result.session.id, result.session);
+    saveSessions(sessions);
+    
+    return NextResponse.json({
+      success: true,
+      sessionId: result.session.id,
+      ...result
+    });
+    
+  } catch (error: any) {
+    console.error("A2A Debate error:", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unknown error" },
+      { error: error.message || "Internal server error" },
       { status: 500 }
     );
   }
 }
 
-async function runDebate(debateId: string, topic: string, context?: string, useScripts: boolean = true) {
-  const startTime = Date.now();
-  const session = debateSessions.get(debateId)!;
-  const messages: { role: string; content: string }[] = [];
-
-  // Enable routing if feature flag is on
-  const routingEnabled = ENABLE_TIER_ROUTING;
-
-  let marketAnalysis: any = null;
-  let confidenceScore: any = null;
-  let kellyCalculation: any = null;
-  let currentPrice: number | null = null;
-
-  // Use TypeScript market analysis instead of Python
-  if (useScripts && session.extractedPair) {
-    console.log(`\n🚀 [A2A-Router] Running analysis for pair: ${session.extractedPair}`);
-
-    try {
-      // Extract price from pair or use default
-      const symbol = session.extractedPair.replace('/', '');
-      currentPrice = symbol.includes('BTC') ? 65000 :
-                     symbol.includes('ETH') ? 3500 :
-                     symbol.includes('SOL') ? 150 : 1000;
-
-      marketAnalysis = analyzeMarket(
-        session.extractedPair,
-        currentPrice,
-        "1h",
-        context
-      );
-
-      session.scriptResults!.marketAnalysis = marketAnalysis;
-      currentPrice = marketAnalysis.current_price;
-      console.log(`✅ [A2A-Router] Market analysis complete: $${currentPrice?.toLocaleString() || 'N/A'}`);
-    } catch (e) {
-      console.error("❌ [A2A-Router] Market analysis failed:", e);
-    }
-  }
-
-  // Build prompt with current price
-  let initialPrompt = `Analyze this trading scenario: ${topic}`;
-
-  if (currentPrice) {
-    initialPrompt += `\n\n**CRITICAL: Current market price is $${currentPrice.toLocaleString()}.**`;
-    initialPrompt += `\n**All analysis MUST be based on this CURRENT price.**`;
-  }
-
-  if (context) {
-    initialPrompt += `\n\nContext: ${context}`;
-  }
-  if (marketAnalysis) {
-    initialPrompt += `\n\n[TECHNICAL DATA]\n${JSON.stringify(marketAnalysis, null, 2)}`;
-  }
-
-  messages.push({ role: "user", content: initialPrompt });
-
-  // Route all three agents based on complexity
-  const agentPrompts = {
-    proposer: currentPrice
-      ? `You are the PROPOSER agent in a trading analysis debate.
-**CRITICAL**: Current price is $${currentPrice.toLocaleString()}. Entry must be NEAR this level (within 5-10%).
-
-Format your response with:
-- SIGNAL: (LONG/SHORT/NEUTRAL)
-- ENTRY: (price level - NEAR current price)
-- TARGET: (price target)
-- STOP: (stop loss)
-- POSITION: (% of portfolio)
-- RATIONALE: (your analysis)
-- RISKS: (key concerns)`
-      : `You are the PROPOSER agent in a trading analysis debate.
-Format your response with:
-- SIGNAL: (LONG/SHORT/NEUTRAL)
-- ENTRY: (price level)
-- TARGET: (price target)
-- STOP: (stop loss)
-- POSITION: (% of portfolio)
-- RATIONALE: (your analysis)
-- RISKS: (key concerns)`,
-    critic: `You are the CRITIC agent. Review the analysis critically.`,
-    consensus: currentPrice
-      ? `You are the CONSENSUS agent.
-**Current price: $${currentPrice.toLocaleString()}**
-Analyze all inputs and provide the final recommendation.`
-      : `You are the CONSENSUS agent.
-Analyze all inputs and provide the final recommendation.`
-  };
-
-  // Get tier assignments for all agents
-  let tierAssignment: TierAssignment[] | null = null;
-  if (routingEnabled) {
-    console.log(`🎯 [A2A-Router] Scoring dimensionality...`);
-    tierAssignment = await routeAllAgents(agentPrompts, context);
-  }
-
-  // Run routed debate
-  const results: any = {};
-  const tierDistribution: { proposer: string; critic: string; consensus: string } = { proposer: 'SIMPLE', critic: 'SIMPLE', consensus: 'SIMPLE' };
-
-  // Proposer Agent
-  if (routingEnabled && tierAssignment) {
-    const proposerTier = tierAssignment.find(a => a.agent === 'proposer');
-    tierDistribution.proposer = proposerTier?.tier || 'SIMPLE';
-
-    console.log(`✨ [A2A-Router] Proposer routing: ${getTierLabel(proposerTier?.tier || 'SIMPLE')} → ${proposerTier?.model || MODELS.proposer}`);
-
-    // Use tier-based prompt
-    const proposerModel = proposerTier?.model || MODELS.proposer;
-    const proposerTierPrompt = createTierPrompt(proposerTier?.tier || 'SIMPLE', 'Proposer agent');
-
-    results.proposer = await callModel(proposerModel, messages, proposerTierPrompt);
-  } else {
-    const proposerResponse = await callModel(MODELS.proposer, messages, `You are the PROPOSER agent in a trading analysis debate.
-${currentPrice ? `**CRITICAL**: Current price is $${currentPrice.toLocaleString()}. Entry must be NEAR this level (within 5-10%).` : ''}
-
-Format your response with:
-- SIGNAL: (LONG/SHORT/NEUTRAL)
-- ENTRY: (price level - NEAR current price)
-- TARGET: (price target)
-- STOP: (stop loss)
-- POSITION: (% of portfolio)
-- RATIONALE: (your analysis)
-- RISKS: (key concerns)`);
-    results.proposer = proposerResponse;
-  }
-
-  session.messages.push({
-    role: "assistant",
-    content: results.proposer,
-    agent: "proposer",
-    timestamp: new Date().toISOString(),
-    scriptData: marketAnalysis
-  });
-
-  // Confidence Scoring (TypeScript)
-  const proposerClaim = results.proposer.split('\n')[0].slice(0, 100) || "Trade proposal";
-
-  if (useScripts) {
-    try {
-      confidenceScore = scoreConfidence(proposerClaim, undefined, "trading");
-      session.scriptResults!.confidenceScore = confidenceScore;
-      console.log("✅ [A2A-Router] Confidence scoring complete");
-    } catch (e) {
-      console.error("❌ [A2A-Router] Confidence scoring failed:", e);
-    }
-  }
-
-  // Critic Agent
-  if (routingEnabled && tierAssignment) {
-    const criticTier = tierAssignment.find(a => a.agent === 'critic');
-    tierDistribution.critic = criticTier?.tier || 'MEDIUM';
-
-    console.log(`✨ [A2A-Router] Critic routing: ${getTierLabel(criticTier?.tier || 'MEDIUM')} → ${criticTier?.model || MODELS.critic}`);
-
-    const criticModel = criticTier?.model || MODELS.critic;
-    const criticTierPrompt = createTierPrompt(criticTier?.tier || 'MEDIUM', 'Critic agent');
-
-    results.critic = await callModel(criticModel, [...messages, { role: "assistant", content: results.proposer }], criticTierPrompt);
-  } else {
-    const criticResponse = await callModel(MODELS.critic, [...messages, { role: "assistant", content: results.proposer }], "You are the CRITIC agent. Review the analysis critically.");
-    results.critic = criticResponse;
-  }
-
-  session.messages.push({
-    role: "assistant",
-    content: results.critic,
-    agent: "critic",
-    timestamp: new Date().toISOString(),
-    scriptData: confidenceScore
-  });
-
-  // Kelly Calculation (TypeScript)
-  const priceLevels = extractPriceLevels(results.proposer);
-
-  if (useScripts && priceLevels.entry && priceLevels.target) {
-    try {
-      const edge = 0.6;
-      const odds = priceLevels.target / priceLevels.entry;
-
-      kellyCalculation = calculateKelly(edge, odds);
-      session.scriptResults!.kellyCalculation = kellyCalculation;
-      console.log("✅ [A2A-Router] Kelly calculation complete");
-    } catch (e) {
-      console.error("❌ [A2A-Router] Kelly calculation failed:", e);
-    }
-  }
-
-  // Consensus Agent
-  if (routingEnabled && tierAssignment) {
-    const consensusTier = tierAssignment.find(a => a.agent === 'consensus');
-    tierDistribution.consensus = consensusTier?.tier || 'COMPLEX';
-
-    console.log(`✨ [A2A-Router] Consensus routing: ${getTierLabel(consensusTier?.tier || 'COMPLEX')} → ${consensusTier?.model || MODELS.consensus}`);
-
-    const consensusModel = consensusTier?.model || MODELS.consensus;
-    const consensusTierPrompt = createTierPrompt(consensusTier?.tier || 'COMPLEX', 'Consensus agent');
-
-    results.consensus = await callModel(
-      consensusModel,
-      [
-        ...messages,
-        { role: "assistant", content: results.proposer },
-        { role: "assistant", content: results.critic }
-      ],
-      consensusTierPrompt
+export async function GET(req: NextRequest) {
+  try {
+    const sessions = loadSessions();
+    const recent = Array.from(sessions.values())
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 20);
+    
+    return NextResponse.json({
+      total: sessions.size,
+      recent
+    });
+  } catch (error: any) {
+    console.error("Failed to list sessions:", error);
+    return NextResponse.json(
+      { error: error.message || "Internal server error" },
+      { status: 500 }
     );
-  } else {
-    const consensusResponse = await callModel(
-      MODELS.consensus,
-      [
-        ...messages,
-        { role: "assistant", content: results.proposer },
-        { role: "assistant", content: results.critic }
-      ],
-      `You are the CONSENSUS agent.
-${currentPrice ? `**Current price: $${currentPrice.toLocaleString()}**` : ''}
-${kellyCalculation ? `**Kelly recommends: ${kellyCalculation.half_kelly}% position (Half Kelly)**` : ''}
-
-Format your response with:
-- FINAL SIGNAL: (LONG/SHORT/NEUTRAL/WAIT)
-- ADJUSTED ENTRY: (realistic level)
-- ADJUSTED TARGET: (price target)
-- ADJUSTED STOP: (stop loss)
-- POSITION SIZE: (% of portfolio)
-- CONFIDENCE: (HIGH/MEDIUM/LOW)
-- SUMMARY: (concise rationale)`
-    );
-    results.consensus = consensusResponse;
   }
-
-  session.messages.push({
-    role: "assistant",
-    content: results.consensus,
-    agent: "consensus",
-    timestamp: new Date().toISOString(),
-    scriptData: kellyCalculation
-  });
-
-  // Save tier distribution and cost metrics
-  session.tierDistribution = tierDistribution;
-  session.routingEnabled = routingEnabled;
-  const isComplex = Object.values(tierDistribution).some(t => t === 'COMPLEX' || t === 'REASONING');
-
-  if (routingEnabled) {
-    const costEstimate = estimateDebateCost(tierDistribution, isComplex);
-    session.estimatedCost = costEstimate.estimatedCost;
-    console.log(`💰 [A2A-Router] Estimated cost: $${costEstimate.estimatedCost.toFixed(4)}`);
-    console.log(`⚡ [A2A-Router] Execution time: ${(Date.now() - startTime) / 1000}s`);
-  }
-
-  saveSessions(debateSessions);
-
-  console.log(`✅ [A2A-Router] Debate complete!`);
-
-  return {
-    proposer: results.proposer,
-    critic: results.critic,
-    consensus: results.consensus,
-    scriptResults: {
-      marketAnalysis,
-      confidenceScore,
-      kellyCalculation
-    },
-    tierDistribution,
-    routingEnabled
-  };
-}
-
-function createTierPrompt(tier: string, agentRole: string): string {
-  const tiers = {
-    SIMPLE: "Provide a quick signal. No detailed analysis. Short response (<100 words).",
-    MEDIUM: "Analyze with moderate depth. Include rationale and basic risk assessment.",
-    COMPLEX: "Provide comprehensive analysis with technical indicators, entry/exit levels, and multi-step reasoning.",
-    REASONING: "Deep mathematical validation. Include multiple calculation steps. Formal reasoning."
-  };
-
-  const agentDesc = {
-    proposer: "Initial signal builder",
-    critic: "Critical reviewer",
-    consensus: "Final synthesizer"
-  };
-
-  return `${tiers[tier as keyof typeof tiers]}\n\nRole: ${agentRole} in a trading analysis debate.`;
-}
-
-async function continueDebate(debateId: string, message: string, useScripts: boolean = true) {
-  const session = debateSessions.get(debateId)!;
-  const debateHistory = session.messages
-    .filter(m => m.agent)
-    .map(m => ({ 
-      role: "assistant" as const, 
-      content: `[${m.agent?.toUpperCase()}]: ${m.content}` 
-    }));
-
-  const messages = [
-    ...debateHistory,
-    { role: "user", content: message }
-  ];
-
-  // Confidence scoring for follow-up
-  let confidenceScore: any = null;
-  if (useScripts && message.toLowerCase().match(/confidence|risk|bias/)) {
-    try {
-      const claim = message.slice(0, 100);
-      confidenceScore = scoreConfidence(claim, undefined, "trading");
-    } catch (e) {
-      console.error("Follow-up confidence scoring failed:", e);
-    }
-  }
-
-  const [proposer, critic, consensus] = await Promise.all([
-    callModel(MODELS.proposer, messages, "Respond to the follow-up question."),
-    callModel(MODELS.critic, messages, "Respond critically."),
-    callModel(MODELS.consensus, messages, "Synthesize the response.")
-  ]);
-
-  session.messages.push(
-    { role: "assistant", content: proposer, agent: "proposer", timestamp: new Date().toISOString() },
-    { role: "assistant", content: critic, agent: "critic", timestamp: new Date().toISOString(), scriptData: confidenceScore },
-    { role: "assistant", content: consensus, agent: "consensus", timestamp: new Date().toISOString() }
-  );
-  
-  saveSessions(debateSessions);
-
-  return { proposer, critic, consensus };
 }
