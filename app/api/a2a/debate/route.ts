@@ -12,7 +12,7 @@ import {
   estimateDebateCost,
   TierAssignment,
   TIER_CONFIG
-} from "../../lib/tierRouter";
+} from "../../../lib/tierRouter";
 
 // Feature flag: enable tiered routing
 const ENABLE_TIER_ROUTING = process.env.ENABLE_TIER_ROUTING !== "false";
