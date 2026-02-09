@@ -8,7 +8,7 @@ import {
   getPositions,
   getWeatherMarkets,
   isSimmerConfigured,
-} from "../../../lib/simmerTrader";
+} from "../../lib/simmerTrader";
 
 export async function GET(request: NextRequest) {
   try {
